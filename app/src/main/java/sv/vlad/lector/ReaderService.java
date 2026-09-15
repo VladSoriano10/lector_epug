@@ -52,7 +52,9 @@ public class ReaderService extends Service {
             @Override public void onSkipToPrevious() { moveChapter(-1); }
         });
         session.setActive(true);
-        registerReceiver(noisy, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
+        IntentFilter audioFilter = new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(noisy, audioFilter, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(noisy, audioFilter);
         initEngine(prefs.getString("engine", ""));
         String last = prefs.getString("last", "");
         if (!last.isEmpty() && new File(getFilesDir(), last).isFile()) openSaved(last);

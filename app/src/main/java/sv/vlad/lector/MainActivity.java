@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(20), dp(16), dp(20), dp(12)); root.setBackgroundColor(Color.rgb(248, 245, 238));
         setContentView(root);
-        title = label("Lector EPUB", 26); title.setTypeface(null, 1);
+        title = label("Lector EPUB", 26); title.setTypeface(null, android.graphics.Typeface.BOLD);
         subtitle = label("Tu biblioteca, a tu ritmo", 15);
         LinearLayout top = row();
         button(top, "Importar", () -> {
