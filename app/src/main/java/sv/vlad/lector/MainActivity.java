@@ -45,6 +45,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs=getSharedPreferences("reader",MODE_PRIVATE);dark=prefs.getBoolean("dark",true);font=prefs.getInt("font",20);
+        setTheme(dark?android.R.style.Theme_Material_NoActionBar:android.R.style.Theme_Material_Light_NoActionBar);
         if(state!=null)restoredId=state.getString("readingId","");
         buildHome();receive(getIntent());
         bound=bindService(new Intent(this,ReaderService.class),connection,BIND_AUTO_CREATE);
@@ -220,11 +221,13 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     @Override public void manual(){if(reader!=null && reader.playing)reader.pause();}
     @Override public void toggle(){controls=!controls;showControls();}
     private void showControls(){if(top!=null){top.setVisibility(controls?View.VISIBLE:View.GONE);bottom.setVisibility(controls?View.VISIBLE:View.GONE);}}
-    private void toggleTheme(){dark=!dark;prefs.edit().putBoolean("dark",dark).apply();if(reading){web.appearance(dark,font);root.setBackgroundColor(background());}else buildHome();}
+    private void toggleTheme(){dark=!dark;prefs.edit().putBoolean("dark",dark).apply();
+        setTheme(dark?android.R.style.Theme_Material_NoActionBar:android.R.style.Theme_Material_Light_NoActionBar);
+        if(reading){web.appearance(dark,font);root.setBackgroundColor(background());}else buildHome();}
     private void appearance(){
         LinearLayout panel=column();panel.setPadding(dp(24),dp(12),dp(24),dp(12));
         Switch mode=new Switch(this);mode.setText("Modo oscuro");mode.setChecked(dark);panel.addView(mode);
-        TextView size=text("Tamaño de letra: "+font,16,Color.DKGRAY);panel.addView(size);
+        TextView size=text("Tamaño de letra: "+font,16,foreground());panel.addView(size);
         SeekBar slider=new SeekBar(this);slider.setMax(18);slider.setProgress(font-16);panel.addView(slider);
         mode.setOnCheckedChangeListener((b,value)->{if(value!=dark)toggleTheme();});
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
