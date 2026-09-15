@@ -28,6 +28,9 @@ public class ReaderService extends Service {
     private String utterance = "", fileId = "";
     public EpubReader.Book book;
     public int chapter, chunk;
+    public int loadVersion, speechOffset;
+    public String locator = "";
+    public int locatorOffset;
     public boolean playing, busy;
     public String status = "Importa un EPUB para comenzar";
     public Runnable listener;
@@ -56,8 +59,6 @@ public class ReaderService extends Service {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(noisy, audioFilter, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(noisy, audioFilter);
         initEngine(prefs.getString("engine", ""));
-        String last = prefs.getString("last", "");
-        if (!last.isEmpty() && new File(getFilesDir(), last).isFile()) openSaved(last);
     }
     private final BroadcastReceiver noisy = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) { pause(); }
@@ -95,10 +96,10 @@ public class ReaderService extends Service {
                         if (chunk >= book.chapters.get(chapter).chunks.size()) { chunk = 0; chapter++; }
                         if (chapter >= book.chapters.size()) {
                             chapter = book.chapters.size() - 1;
-                            chunk = book.chapters.get(chapter).chunks.size() - 1;
+                            chunk = Math.max(0, book.chapters.get(chapter).chunks.size() - 1);
                             pause(); status = "Libro terminado"; changed(); return;
                         }
-                        save(); speak();
+                        speechOffset = 0; save(); speak();
                     }); }
                     public void onError(String id) { main.post(() -> {
                         if (!id.equals(utterance)) return;
@@ -160,7 +161,8 @@ public class ReaderService extends Service {
                 String id = hash + ".epub";
                 File destination = new File(getFilesDir(), id);
                 if (!destination.exists() && !temporary.renameTo(destination)) throw new IOException("No se pudo guardar el EPUB.");
-                prefs.edit().putString("title:" + id, parsed.title).apply();
+                prefs.edit().putString("title:" + id, parsed.title).putString("author:" + id, parsed.author)
+                    .putString("cover:" + id, parsed.cover).putInt(id + ":chapters", parsed.chapters.size()).apply();
                 main.post(() -> loaded(parsed, id));
             } catch (Exception e) { fail(e); }
             finally { if (temporary != null) temporary.delete(); }
@@ -168,6 +170,7 @@ public class ReaderService extends Service {
     }
     public void openSaved(String id) {
         if (busy) return;
+        if (!id.matches("[a-f0-9]{64}\\.epub")) return;
         pause(); busy = true; status = "Abriendo libro…"; changed();
         io.execute(() -> {
             try { EpubReader.Book parsed = EpubReader.open(new File(getFilesDir(), id)); main.post(() -> loaded(parsed, id)); }
@@ -179,7 +182,11 @@ public class ReaderService extends Service {
         book = parsed; fileId = id; busy = false;
         chapter = Math.max(0, Math.min(prefs.getInt(id + ":chapter", 0), book.chapters.size() - 1));
         chunk = Math.max(0, Math.min(prefs.getInt(id + ":chunk", 0), book.chapters.get(chapter).chunks.size() - 1));
-        prefs.edit().putString("last", id).apply(); status = "Libro listo"; changed();
+        locator = prefs.getString(id + ":locator", "chunk:" + chunk);
+        locatorOffset = prefs.getInt(id + ":offset", 0); speechOffset = prefs.getInt(id + ":speechOffset", 0);
+        prefs.edit().putString("last", id).putString("author:" + id, parsed.author).putString("cover:" + id, parsed.cover)
+            .putInt(id + ":chapters", parsed.chapters.size()).putLong(id + ":opened", System.currentTimeMillis()).apply();
+        loadVersion++; status = "Libro listo"; changed();
     }
     private void fail(Exception e) { main.post(() -> { if (!destroyed) { busy = false; status = "Error: " + e.getMessage(); changed(); } }); }
     public Map<String, String> library() {
@@ -189,7 +196,19 @@ public class ReaderService extends Service {
         return books;
     }
     private void save() {
-        if (book != null) prefs.edit().putInt(fileId + ":chapter", chapter).putInt(fileId + ":chunk", chunk).apply();
+        if (book != null) prefs.edit().putInt(fileId + ":chapter", chapter).putInt(fileId + ":chunk", chunk)
+            .putString(fileId + ":locator", locator).putInt(fileId + ":offset", locatorOffset)
+            .putInt(fileId + ":speechOffset", speechOffset).apply();
+    }
+    public String currentId() { return fileId; }
+    public File currentFile() { return new File(getFilesDir(), fileId); }
+    public void visualPosition(String loc, int offset, int firstChunk, int page, int pages) {
+        if (book == null || busy) return;
+        prefs.edit().putInt(fileId + ":page", page).putInt(fileId + ":pages", pages).apply();
+        if (playing) return;
+        locator = loc; locatorOffset = Math.max(0, offset);
+        chunk = Math.max(0, Math.min(firstChunk, book.chapters.get(chapter).chunks.size() - 1));
+        speechOffset = locatorOffset; save();
     }
     public void play() {
         if (busy || book == null || playing) return;
@@ -215,12 +234,19 @@ public class ReaderService extends Service {
     }
     private void speak() {
         if (!playing || book == null) return;
+        while (book.chapters.get(chapter).chunks.isEmpty()) {
+            if (chapter + 1 >= book.chapters.size()) { pause(); status = "Libro terminado"; changed(); return; }
+            chapter++; chunk = 0; speechOffset = 0;
+        }
+        locator = "chunk:" + chunk; locatorOffset = speechOffset; save();
         if (wake.isHeld()) wake.release();
         wake.acquire(10 * 60 * 1000L);
         utterance = UUID.randomUUID().toString();
         status = "Leyendo · fragmento " + (chunk + 1) + " de " + book.chapters.get(chapter).chunks.size();
         tts.setSpeechRate(rate());
-        if (tts.speak(book.chapters.get(chapter).chunks.get(chunk), TextToSpeech.QUEUE_FLUSH, null, utterance) == TextToSpeech.ERROR) {
+        String phrase = book.chapters.get(chapter).chunks.get(chunk);
+        int start = Math.max(0, Math.min(speechOffset, phrase.length() - 1));
+        if (tts.speak(phrase.substring(start), TextToSpeech.QUEUE_FLUSH, null, utterance) == TextToSpeech.ERROR) {
             pause(); status = "El motor no pudo reproducir esta voz.";
         }
         changed();
@@ -239,19 +265,22 @@ public class ReaderService extends Service {
     }
     public void goChapter(int index) {
         if (book == null || busy) return;
-        boolean resume = playing; pause(); chapter = index; chunk = 0; save(); changed(); if (resume) play();
+        boolean resume = playing; pause(); chapter = Math.max(0, Math.min(index, book.chapters.size() - 1));
+        chunk = 0; speechOffset = 0; locator = ""; locatorOffset = 0; save(); changed(); if (resume) play();
     }
     public void moveChunk(int delta) {
         if (book == null || busy) return;
         boolean resume = playing; pause();
         chunk = Math.max(0, Math.min(chunk + delta, book.chapters.get(chapter).chunks.size() - 1));
+        speechOffset = 0; locator = "chunk:" + chunk; locatorOffset = 0;
         save(); changed(); if (resume) play();
     }
     private PendingIntent command(String action) {
         return PendingIntent.getService(this, action.hashCode(), new Intent(this, ReaderService.class).setAction(action), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
     private Notification notification() {
-        PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class)
+            .setAction("sv.vlad.lector.RESUME").addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, "reading").setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle(book == null ? "Lector EPUB" : book.title)
             .setContentText(book == null ? "Preparando lectura" : book.chapters.get(chapter).title)

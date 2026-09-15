@@ -1,6 +1,6 @@
 # Lector EPUB · Android
 
-Primera versión personal para importar EPUB y escuchar su texto con un motor TTS instalado. Android 8 o superior; dispositivo previsto para prueba: Redmi Note 11 con Android 13.
+Versión 0.2: biblioteca y lector paginado con ilustraciones, para leer o escuchar EPUB con un motor TTS instalado. Android 8 o superior; dispositivo de prueba: Redmi Note 11 con Android 13. El usuario confirmó que la voz de la versión 0.1 funciona en su teléfono.
 
 ## Obtener el APK sin Android Studio
 
@@ -14,8 +14,14 @@ El APK es de prueba y no se publica en Google Play. Las compilaciones de prueba 
 ## Uso
 
 - **Importar**: selecciona un EPUB sin DRM. Se copia a los datos privados de la app; no necesitas conceder acceso a todo el almacenamiento.
-- **Biblioteca**: vuelve a abrir los libros importados. Importar de nuevo el mismo archivo conserva el progreso.
-- **Escuchar / Pausar**, capítulos y avance/retroceso por fragmentos. Pausar y reanudar repite el fragmento actual (máximo 700 caracteres), no la palabra exacta.
+- **Biblioteca inicial**: tarjetas con portada cuando está declarada en el EPUB, título, autor y progreso aproximado por secciones. Abre un libro para entrar en la vista de lectura. Importar el mismo archivo no crea duplicados.
+- **Abrir con / Compartir**: registrado para EPUB y tipos ZIP/binario genéricos que usan algunos gestores y mensajerías. Acepta `ACTION_VIEW` y `ACTION_SEND`, copia el archivo mientras conserva el permiso temporal y lo añade a la biblioteca. La disponibilidad de la opción depende del tipo MIME y de los permisos que entregue WhatsApp o la app de origen. Un ZIP genérico se valida como EPUB antes de guardarse.
+- **Lectura a pantalla completa**: desliza horizontalmente para pasar página; toca para mostrar u ocultar controles superpuestos. También hay botones y deslizador de páginas por sección. El menú no reduce el espacio de paginación.
+- **Posición**: guarda sección, elemento y desplazamiento dentro del texto. Cambiar tamaño de letra u orientación recalcula las páginas conservando el contenido de referencia. Las páginas mostradas son de la sección actual: su número cambia con el tamaño de pantalla y fuente.
+- **Índice**: utiliza navegación EPUB 3 o NCX EPUB 2, incluidos enlaces a apartados dentro de una misma sección. Si falta el índice, utiliza el orden `spine`.
+- **Imágenes interiores**: muestra imágenes locales JPG, PNG, GIF, WebP, SVG como recurso y envoltorios SVG con una imagen raster. Las láminas sin texto se conservan visualmente y la voz pasa a la siguiente sección con texto. No aplica OCR a imágenes.
+- **Modo oscuro y letra**: tema persistente en biblioteca y lectura; tamaño entre 16 y 34. Desde el lector toca **Aa**. En la biblioteca usa el botón de luna.
+- **Escuchar / Pausar**: mantiene motor, voz, velocidad y reproducción de fondo. Al pasar de página manualmente se pausa y se prepara la lectura desde el primer texto visible. Reanudar tras una pausa de voz puede repetir el fragmento actual, no garantiza la palabra exacta.
 - **Voces**: selecciona un motor instalado y después una voz local en español. Los idiomas distintos de español y las voces que declaran necesitar red no aparecen. Las variantes distintas de España se muestran primero.
 - **Velocidad**: de 0.75× a 2×.
 - La reproducción usa un servicio de primer plano, notificación, sesión multimedia y bloqueo parcial de CPU durante la lectura. Se pausa al perder foco de audio o desconectar auriculares. No reinicia la lectura automáticamente después de que Android cierre el proceso.
@@ -28,13 +34,13 @@ Esta app **no incluye ninguna voz ni un modelo Piper**. Utiliza la interfaz TTS 
 
 Los libros y el progreso se guardan localmente. El lector no solicita permiso de Internet, pero el motor TTS es otra aplicación: prueba en modo avión una vez descargada la voz para verificar su funcionamiento local.
 
-## Límites de la primera versión
+## Límites
 
-- Solo EPUB con texto, sin DRM; no PDF, OCR, cómics ni diseño fijo.
-- Presentación de texto simplificada: fragmento actual y contexto cercano, sin imágenes, tablas ni maquetación original.
+- EPUB sin DRM; no PDF ni OCR. Reorganiza el contenido para adaptarlo a la pantalla; no reproduce la maquetación fija original.
+- Conserva texto, ilustraciones y formato básico. Elimina scripts, formularios, estilos del editor y recursos remotos. Las tablas extensas y SVG vectoriales incrustados complejos pueden requerir ajustes; las ilustraciones superiores a 4 MB no se cargan.
 - Límite de archivo importado: 100 MB; capítulo: 4 MB; contenido HTML acumulado: 16 MB.
 - Lectura según el `spine` del EPUB, no según el orden de los archivos ZIP. Omite contenido marcado como no lineal y recursos que no son HTML.
-- Pendientes: modelos de voz integrados/importables, selección de voz abierta LATAM verificada, firma estable, eliminación de libros, temporizador y pruebas físicas de batería/pantalla bloqueada en MIUI.
+- Pendientes: modelos de voz integrados/importables, selección de voz abierta LATAM verificada, firma estable, eliminación de libros y temporizador.
 
 ## Compilar y verificar
 
@@ -46,7 +52,9 @@ gradle testDebugUnitTest lintDebug assembleDebug --no-daemon
 
 También puedes importar el proyecto en Android Studio o ejecutar ese comando con Gradle 8.11.1 y Android SDK 35 instalados. El repositorio todavía no incluye Gradle Wrapper; la versión de Gradle se fija en Actions.
 
-Las pruebas JVM comprueban orden de capítulos, entidades/acentos, exclusión de scripts, límites de tamaño, referencias externas y fragmentación sin perder texto ni romper caracteres Unicode.
+Las pruebas JVM comprueban orden de capítulos, entidades/acentos, exclusión de scripts, límites de tamaño, referencias externas, fragmentación sin romper Unicode, imágenes, secciones sin texto e índice con anclas.
+
+`tests/pagination.cjs` verifica el motor visual en Chromium: pasar/restaurar páginas, cambio de fuente, tema, ajuste de ilustraciones, rotación y seguimiento de voz. Requiere Playwright y Chromium (`npm install --no-save playwright`, `npx playwright install chromium`, `node tests/pagination.cjs`).
 
 Pruebas manuales necesarias en Redmi Note 11:
 
@@ -56,5 +64,7 @@ Pruebas manuales necesarias en Redmi Note 11:
 4. Bloquear pantalla durante 10 minutos y usar los controles de notificación.
 5. Desconectar auriculares o reproducir audio en otra app: debe pausar.
 6. Si MIUI interrumpe la reproducción, revisar la restricción de batería de esta app y del motor de voz.
+7. Abrir y compartir un EPUB desde WhatsApp; comprobar que reaparece al cerrar y abrir la app.
+8. Abrir un libro ilustrado, deslizar a una imagen y comprobar modo oscuro, tamaño de letra, índice y restauración después de cerrar.
 
 Dependencia de extracción HTML: [jsoup](https://jsoup.org/), licencia MIT. No se redistribuyen voces ni libros.

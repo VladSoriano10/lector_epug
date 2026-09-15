@@ -49,4 +49,26 @@ public class EpubReaderTest {
             catch (IOException expected) { assertTrue(expected.getMessage().contains("4 MB")); }
         } finally { f.delete(); }
     }
+    @Test public void keepsIllustrationsAndTocButRemovesActiveContent() throws Exception {
+        File f=File.createTempFile("illustrated", ".epub");
+        try {
+            try(ZipOutputStream z=new ZipOutputStream(new FileOutputStream(f))) {
+                entry(z,"META-INF/container.xml","<container><rootfile full-path='OPS/book.opf'/></container>");
+                entry(z,"OPS/book.opf","<package xmlns:dc='http://purl.org/dc/elements/1.1/'><metadata><dc:title>Ilustrado</dc:title><dc:creator>Autor</dc:creator></metadata><manifest><item id='a' href='a.xhtml' media-type='application/xhtml+xml'/><item id='b' href='b.xhtml' media-type='application/xhtml+xml'/><item id='n' href='nav.xhtml' properties='nav' media-type='application/xhtml+xml'/><item id='cover' href='images/cover.jpg' properties='cover-image'/></manifest><spine><itemref idref='a'/><itemref idref='b'/></spine></package>");
+                entry(z,"OPS/nav.xhtml","<nav epub:type='toc'><a href='a.xhtml#inicio'>Capítulo del índice</a><a href='b.xhtml'>Lámina</a></nav>");
+                entry(z,"OPS/a.xhtml","<html><body><h1 id='inicio'>Texto</h1><p onclick='evil()'>Hola <em>mundo</em>.</p><img src='images/a%20b.png' onerror='evil()'><img src='https://evil.example/a.jpg'><script>evil()</script><iframe src='file:///secret'></iframe><svg><image xlink:href='images/two.jpg'/></svg></body></html>");
+                entry(z,"OPS/b.xhtml","<html><body><img src='images/full.jpg'></body></html>");
+            }
+            EpubReader.Book book=EpubReader.open(f);
+            assertEquals("Autor",book.author);assertEquals("OPS/images/cover.jpg",book.cover);
+            assertEquals(2,book.chapters.size());assertTrue(book.chapters.get(1).chunks.isEmpty());
+            String html=book.chapters.get(0).html;
+            assertTrue(html.contains("https://epub.local/asset/OPS/images/a%20b.png"));
+            assertTrue(html.contains("OPS/images/two.jpg"));assertTrue(html.contains("<em>"));
+            assertTrue(html.contains("data-loc="));assertTrue(html.contains("data-anchor=\"inicio\""));
+            assertFalse(html.contains("evil"));assertFalse(html.contains("iframe"));assertFalse(html.contains("onerror"));
+            assertEquals("Capítulo del índice",book.toc.get(0).title);assertEquals("inicio",book.toc.get(0).anchor);
+            assertEquals(1,book.toc.get(1).chapter);
+        }finally{f.delete();}
+    }
 }
