@@ -49,12 +49,35 @@ public class EpubReaderTest {
             catch (IOException expected) { assertTrue(expected.getMessage().contains("4 MB")); }
         } finally { f.delete(); }
     }
+    @Test public void findsLegacyWrappedAndFallbackCovers() throws Exception {
+        String[] declarations = {
+            "<metadata><meta name='cover' content='picture'/></metadata>",
+            "<guide><reference type='cover' href='title.xhtml'/></guide>",
+            "<metadata><meta name='cover' content='title.xhtml'/></metadata>",
+            "<metadata><meta name='cover' content='https://invalid.example/a.jpg'/></metadata>",
+            ""
+        };
+        for(String declaration : declarations) {
+            File f=File.createTempFile("cover-test", ".epub");
+            try {
+                try(ZipOutputStream z=new ZipOutputStream(new FileOutputStream(f))) {
+                    entry(z,"META-INF/container.xml","<container><rootfile full-path='OPS/book.opf'/></container>");
+                    entry(z,"OPS/book.opf","<package>"+declaration+"<manifest><item id='picture' href='images/art%20one.jpg'/><item id='a' href='title.xhtml'/></manifest><spine><itemref idref='a'/></spine></package>");
+                    entry(z,"OPS/title.xhtml","<html><body><img src='missing.jpg'/><img src='https://invalid.example/x.jpg'/><svg><image xlink:href='wrap.svg'/></svg></body></html>");
+                    entry(z,"OPS/wrap.svg","<svg><image xlink:href='images/art%20one.jpg'/></svg>");
+                    entry(z,"OPS/images/art one.jpg","image fixture");
+                }
+                assertEquals("OPS/images/art one.jpg",EpubReader.findCover(f));
+            } finally { f.delete(); }
+        }
+    }
     @Test public void keepsIllustrationsAndTocButRemovesActiveContent() throws Exception {
         File f=File.createTempFile("illustrated", ".epub");
         try {
             try(ZipOutputStream z=new ZipOutputStream(new FileOutputStream(f))) {
                 entry(z,"META-INF/container.xml","<container><rootfile full-path='OPS/book.opf'/></container>");
                 entry(z,"OPS/book.opf","<package xmlns:dc='http://purl.org/dc/elements/1.1/'><metadata><dc:title>Ilustrado</dc:title><dc:creator>Autor</dc:creator></metadata><manifest><item id='a' href='a.xhtml' media-type='application/xhtml+xml'/><item id='b' href='b.xhtml' media-type='application/xhtml+xml'/><item id='n' href='nav.xhtml' properties='nav' media-type='application/xhtml+xml'/><item id='cover' href='images/cover.jpg' properties='cover-image'/></manifest><spine><itemref idref='a'/><itemref idref='b'/></spine></package>");
+                entry(z,"OPS/images/cover.jpg","image fixture");
                 entry(z,"OPS/nav.xhtml","<nav epub:type='toc'><a href='a.xhtml#inicio'>Capítulo del índice</a><a href='b.xhtml'>Lámina</a></nav>");
                 entry(z,"OPS/a.xhtml","<html><body><h1 id='inicio'>Texto</h1><p onclick='evil()'>Hola <em>mundo</em>.</p><img src='images/a%20b.png' onerror='evil()'><img src='https://evil.example/a.jpg'><script>evil()</script><iframe src='file:///secret'></iframe><svg><image xlink:href='images/two.jpg'/></svg></body></html>");
                 entry(z,"OPS/b.xhtml","<html><body><img src='images/full.jpg'></body></html>");
