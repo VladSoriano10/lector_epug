@@ -17,3 +17,4 @@ body { -webkit-text-size-adjust:100%; font-family:Georgia,'Times New Roman',seri
 #counter { position:absolute; bottom:8px; left:12px; right:12px; text-align:center; color:var(--muted); font:12px sans-serif; pointer-events:none; }
 ::selection { background:#558a98; color:white; }
 .turn-sheet { position:fixed; overflow:hidden; pointer-events:none; background:var(--bg); z-index:5; backface-visibility:hidden; box-shadow:8px 0 24px #0005; }
+.page-end { position:absolute; top:0; width:1px; height:1px; pointer-events:none; }

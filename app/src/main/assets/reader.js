@@ -2,6 +2,8 @@
 (() => {
   'use strict';
   const viewport = document.getElementById('viewport'), book = document.getElementById('book');
+  const pageEnd=document.createElement('i');
+  pageEnd.className='page-end';pageEnd.setAttribute('aria-hidden','true');viewport.appendChild(pageEnd);
   let epoch = 0, page = 0, count = 1, stride = 1, ready = false, current = {loc:'', offset:0};
   let touch = null, suppressClick = false, resizeTimer;
   let turnSheet = null, turnAnimation = null;
@@ -19,7 +21,7 @@
       transformOrigin:delta>0?'left center':'right center'});
     const copy=book.cloneNode(true);copy.removeAttribute('id');copy.classList.add('turn-book');
     copy.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
-    sheet.appendChild(copy);document.body.appendChild(sheet);sheet.scrollLeft=viewport.scrollLeft;
+    sheet.appendChild(copy);sheet.appendChild(pageEnd.cloneNode());document.body.appendChild(sheet);sheet.scrollLeft=viewport.scrollLeft;
     turnSheet=sheet;
     turnAnimation=sheet.animate([
       {transform:'perspective(1000px) rotateY(0deg)',opacity:1},
@@ -105,7 +107,10 @@
     const width=viewport.clientWidth-2*INSET;
     book.style.columnWidth=width+'px'; stride=width+GAP;
     book.style.setProperty('--page-height',Math.max(40,viewport.clientHeight-28)+'px');
-    count=Math.max(1,Math.round((book.scrollWidth-2*INSET+GAP)/stride)); ready=true; restore(loc,offset);
+    count=Math.max(1,Math.round((book.scrollWidth-2*INSET+GAP)/stride));
+    // Chromium excludes trailing multicolumn padding from overflow. Reserve a full final viewport.
+    pageEnd.style.left=((count-1)*stride+viewport.clientWidth-1)+'px';
+    ready=true; restore(loc,offset);
   }
   window.Reader={
     async load(html,dark,font,loc,offset,token) {
