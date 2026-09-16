@@ -178,7 +178,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         root.addView(bottom,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
         LinearLayout playback=new LinearLayout(this);bottom.addView(playback);
         rowButton(playback,"◀ Página",()->web.turn(-1));
-        play=button("Escuchar",()->{if(reader.playing)reader.pause();else reader.play();});playback.addView(play,new LinearLayout.LayoutParams(0,dp(48),1));
+        play=button("Escuchar",()->{if(reader.playing)reader.pause();else web.startSpeech();});playback.addView(play,new LinearLayout.LayoutParams(0,dp(48),1));
         rowButton(playback,"Página ▶",()->web.turn(1));
         pageLabel=text("",14,Color.WHITE);pageLabel.setGravity(Gravity.CENTER);bottom.addView(pageLabel);
         pageSlider=new SeekBar(this);bottom.addView(pageSlider,new LinearLayout.LayoutParams(-1,dp(40)));
@@ -208,7 +208,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
             heading.setText(reader.book.title);
         }else if(nextLocator!=null){web.locate(nextLocator,0);nextLocator=null;}
         subheading.setText(reader.book.chapters.get(reader.chapter).title+" · "+reader.status);
-        if(reader.playing && lastSpoken!=reader.chunk){lastSpoken=reader.chunk;if(!chapterChanged)web.speak(reader.chunk,reader.speechOffset);}
+        if(reader.playing){lastSpoken=reader.chunk;if(!chapterChanged)web.speak(reader.chunk,reader.speechOffset);}
         if(!reader.playing){lastSpoken=-1;web.clearSpeech();}
     }
     @Override public void position(int chapter,int p,int total,String loc,int offset,int chunk) {
@@ -224,6 +224,16 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         navigating=false;shownChapter=-1;render();
     }
     @Override public void manual(){if(reader!=null && reader.playing)reader.pause();}
+    @Override public void playVisible(int chapter,String loc,int offset,int chunk) {
+        if(!reading || reader==null || reader.busy || reader.playing || reader.chapter!=chapter)return;
+        reader.visualPosition(loc,offset,chunk,page,pages);
+        reader.play();
+    }
+    @Override public void boundarySpeech() {
+        if(reader==null || reader.busy || reader.playing)return;
+        if(reader.chapter+1<reader.book.chapters.size()){reader.goChapter(reader.chapter+1);reader.play();}
+        else Toast.makeText(this,"No hay más texto después de esta página",Toast.LENGTH_SHORT).show();
+    }
     @Override public void toggle(){controls=!controls;showControls();}
     private void showControls(){if(top!=null){top.setVisibility(controls?View.VISIBLE:View.GONE);bottom.setVisibility(controls?View.VISIBLE:View.GONE);}}
     private void toggleTheme(){dark=!dark;prefs.edit().putBoolean("dark",dark).apply();

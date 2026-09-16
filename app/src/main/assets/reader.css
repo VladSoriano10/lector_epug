@@ -4,7 +4,7 @@ html.dark { color-scheme:dark; --bg:#10181b; --fg:#e0e6e5; --muted:#90a4a8; --ac
 html,body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--fg); }
 body { -webkit-text-size-adjust:100%; font-family:Georgia,'Times New Roman',serif; }
 #viewport { position:absolute; left:24px; right:24px; top:24px; bottom:36px; overflow:hidden; }
-:is(#book,.turn-book) { height:100%; width:100%; column-fill:auto; column-gap:48px; font-size:20px; line-height:1.55; overflow-wrap:anywhere; text-align:left; }
+:is(#book,.turn-book) { height:100%; width:100%; padding:0 6px; column-fill:auto; column-gap:48px; font-size:20px; line-height:1.55; overflow-wrap:anywhere; text-align:left; }
 :is(#book,.turn-book) p,:is(#book,.turn-book) div { margin:0 0 .85em; }
 :is(#book,.turn-book) h1,:is(#book,.turn-book) h2,:is(#book,.turn-book) h3 { line-height:1.25; break-after:avoid; margin:.4em 0 .8em; }
 :is(#book,.turn-book) h1 { font-size:1.5em; } :is(#book,.turn-book) h2 { font-size:1.3em; } :is(#book,.turn-book) h3 { font-size:1.1em; }

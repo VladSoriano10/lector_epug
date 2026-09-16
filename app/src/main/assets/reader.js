@@ -28,7 +28,30 @@
     turnAnimation.onfinish=()=>{if(turnSheet===sheet)cancelTurn();};
   }
   const bridge = (name, ...args) => { if (window.AndroidReader && typeof AndroidReader[name] === 'function') AndroidReader[name](epoch,...args); };
-  function pageAtRect(rect) { return Math.max(0, Math.floor((rect.left - viewport.getBoundingClientRect().left + viewport.scrollLeft + 1) / stride)); }
+  const INSET=6, GAP=48;
+  function pageAtRect(rect) { return Math.max(0, Math.floor((rect.left - viewport.getBoundingClientRect().left + viewport.scrollLeft - INSET + GAP/2) / stride)); }
+  function visibleOffset(el) {
+    const node=el.firstChild;
+    if(!node || node.nodeType!==3)return -1;
+    const bounds=viewport.getBoundingClientRect(), range=document.createRange();
+    for(let offset=0;offset<node.length;offset++) {
+      if(/\s/.test(node.data[offset]))continue;
+      range.setStart(node,offset);range.setEnd(node,offset+1);
+      if([...range.getClientRects()].some(r=>r.width>0 && r.right>bounds.left+INSET && r.left<bounds.right-INSET &&
+          r.bottom>bounds.top && r.top<bounds.bottom))return offset;
+    }
+    return -1;
+  }
+  function visibleSpeech() {
+    for(const el of book.querySelectorAll('[data-chunk]')) {
+      if(![...el.getClientRects()].some(r=>pageAtRect(r)===page))continue;
+      const offset=visibleOffset(el);
+      if(offset>=0)return {loc:'loc:'+el.dataset.loc,offset,chunk:Number(el.dataset.chunk)};
+    }
+    // Illustration-only page: use the following text, never a previous paragraph.
+    const next=[...book.querySelectorAll('[data-chunk]')].find(el=>charPage(el,0)>page);
+    return next ? {loc:'loc:'+next.dataset.loc,offset:0,chunk:Number(next.dataset.chunk)} : null;
+  }
   function charPage(element, offset) {
     if (!element.firstChild || element.firstChild.nodeType !== 3) return pageAtRect(element.getBoundingClientRect());
     const length=element.firstChild.length, range=document.createRange();
@@ -50,9 +73,8 @@
       if (!rects.some(r=>pageAtRect(r)===page)) continue;
       let offset=0;
       if(el.dataset.chunk!==undefined && el.firstChild && el.firstChild.nodeType===3) {
-        let low=0,high=el.firstChild.length;
-        while(low<high) { const middle=(low+high)>>1; if(charPage(el,middle)<page) low=middle+1; else high=middle; }
-        offset=low;
+        offset=visibleOffset(el);
+        if(offset<0)continue;
       }
       let chunk=Number(el.dataset.chunk ?? -1);
       if(chunk<0) {
@@ -80,9 +102,10 @@
   }
   function layout(loc,offset) {
     cancelTurn();
-    book.style.columnWidth=viewport.clientWidth+'px'; stride=viewport.clientWidth+48;
+    const width=viewport.clientWidth-2*INSET;
+    book.style.columnWidth=width+'px'; stride=width+GAP;
     book.style.setProperty('--page-height',Math.max(40,viewport.clientHeight-28)+'px');
-    count=Math.max(1,Math.round((book.scrollWidth+48)/stride)); ready=true; restore(loc,offset);
+    count=Math.max(1,Math.round((book.scrollWidth-2*INSET+GAP)/stride)); ready=true; restore(loc,offset);
   }
   window.Reader={
     async load(html,dark,font,loc,offset,token) {
@@ -90,7 +113,7 @@
       epoch=token; const ownEpoch=token; ready=false; viewport.scrollLeft=0; page=0;
       document.documentElement.classList.toggle('dark',dark); book.style.fontSize=font+'px';
       book.innerHTML=html; current={loc,offset};
-      book.style.columnWidth=viewport.clientWidth+'px';
+      book.style.columnWidth=(viewport.clientWidth-2*INSET)+'px';
       book.style.setProperty('--page-height',Math.max(40,viewport.clientHeight-28)+'px');
       await Promise.all([...book.querySelectorAll('img')].map(img=>img.complete?Promise.resolve():new Promise(resolve=>{
         img.onload=resolve; img.onerror=()=>{img.alt=img.alt||'Ilustración no disponible';resolve();};
@@ -99,6 +122,13 @@
       requestAnimationFrame(()=>{if(ownEpoch===epoch)layout(loc,offset);});
     },
     page(target) { cancelTurn();go(target); },
+    startSpeech() {
+      if(!ready)return;
+      cancelTurn();
+      const position=visibleSpeech();
+      if(position)bridge('playVisible',position.loc,position.offset,position.chunk);
+      else bridge('boundarySpeech');
+    },
     turn(delta) {
       if(!ready)return;
       if(page+delta<0 || page+delta>=count) bridge('boundary',delta);

@@ -26,6 +26,7 @@ public class ReaderService extends Service {
     private boolean ready, foreground, destroyed;
     private int generation;
     private String utterance = "", fileId = "";
+    private int utteranceStart;
     public EpubReader.Book book;
     public int chapter, chunk;
     public int loadVersion, speechOffset;
@@ -90,6 +91,12 @@ public class ReaderService extends Service {
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     public void onStart(String id) { }
+                    @Override public void onRangeStart(String id,int start,int end,int frame) { main.post(() -> {
+                        if(!playing || !id.equals(utterance) || book==null)return;
+                        speechOffset=utteranceStart+start;
+                        locator="chunk:"+chunk;locatorOffset=speechOffset;
+                        save();changed();
+                    }); }
                     public void onDone(String id) { main.post(() -> {
                         if (!playing || !id.equals(utterance)) return;
                         chunk++;
@@ -246,6 +253,7 @@ public class ReaderService extends Service {
         tts.setSpeechRate(rate());
         String phrase = book.chapters.get(chapter).chunks.get(chunk);
         int start = Math.max(0, Math.min(speechOffset, phrase.length() - 1));
+        utteranceStart=start;
         if (tts.speak(phrase.substring(start), TextToSpeech.QUEUE_FLUSH, null, utterance) == TextToSpeech.ERROR) {
             pause(); status = "El motor no pudo reproducir esta voz.";
         }
