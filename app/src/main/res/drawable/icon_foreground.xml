@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Original vector interpretation of the user's book/V and contrasting wings. -->
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.8" android:scaleY="0.8">
+    <path android:fillColor="#15202D" android:strokeColor="#CC727F" android:strokeWidth="0.9"
+        android:pathData="M42,43 C35,39 32,32 34,27 C25,30 17,41 16,53 C22,47 27,48 29,54 C33,48 36,53 39,59 L44,54 Z" />
+    <path android:fillColor="#00000000" android:strokeColor="#596373" android:strokeWidth="0.8"
+        android:pathData="M34,28 L29,52 M34,28 Q24,36 17,51 M34,28 Q34,41 40,52" />
+    <path android:fillColor="#F0FCFF" android:pathData="M65,43 C70,38 68,29 73,27 C78,24 83,30 93,29 C88,35 83,36 77,35 C82,38 86,38 92,36 C88,42 82,43 76,40 C81,45 85,45 89,44 C85,49 79,49 74,45 C77,50 80,52 84,51 C81,55 76,54 71,49 C73,54 75,56 77,57 C72,59 69,55 65,52 Z" />
+    <path android:fillColor="#00000000" android:strokeColor="#B5DDE7" android:strokeWidth="1"
+        android:pathData="M68,48 Q70,29 79,30 M71,38 Q78,34 86,33 M70,43 Q77,43 82,46" />
+    <path android:fillColor="#11465D" android:strokeColor="#DDF8F9" android:strokeWidth="1.8"
+        android:pathData="M35,43 L35,72 Q45,70 54,78 Q63,70 73,72 L73,43 L69,43 L69,68 Q60,68 54,73 Q48,68 39,68 L39,43 Z" />
+    <path android:fillColor="#176579" android:strokeColor="#FFFFFF" android:strokeWidth="1.8"
+        android:pathData="M39,39 Q48,39 54,45 Q60,39 69,39 L69,68 Q60,68 54,73 Q48,68 39,68 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M44,48 L49,48 L54,62 L60,48 L65,46 L56,67 L52,67 Z" />
+    <path android:fillColor="#E6FDFF" android:pathData="M54,40 Q53,30 64,28 Q64,36 56,39 L59,33 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M64,41 L64.8,43.2 L67,44 L64.8,44.8 L64,47 L63.2,44.8 L61,44 L63.2,43.2 Z" />
+    </group>
+</vector>

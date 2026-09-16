@@ -4,6 +4,29 @@
   const viewport = document.getElementById('viewport'), book = document.getElementById('book');
   let epoch = 0, page = 0, count = 1, stride = 1, ready = false, current = {loc:'', offset:0};
   let touch = null, suppressClick = false, resizeTimer;
+  let turnSheet = null, turnAnimation = null;
+  function cancelTurn() {
+    if(turnAnimation)turnAnimation.cancel();
+    if(turnSheet)turnSheet.remove();
+    turnAnimation=null;turnSheet=null;
+  }
+  function animateTurn(delta) {
+    cancelTurn();
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+    const rect=viewport.getBoundingClientRect(), sheet=document.createElement('div');
+    sheet.className='turn-sheet';sheet.setAttribute('aria-hidden','true');
+    Object.assign(sheet.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px',
+      transformOrigin:delta>0?'left center':'right center'});
+    const copy=book.cloneNode(true);copy.removeAttribute('id');copy.classList.add('turn-book');
+    copy.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
+    sheet.appendChild(copy);document.body.appendChild(sheet);sheet.scrollLeft=viewport.scrollLeft;
+    turnSheet=sheet;
+    turnAnimation=sheet.animate([
+      {transform:'perspective(1000px) rotateY(0deg)',opacity:1},
+      {transform:'perspective(1000px) rotateY('+(delta>0?-75:75)+'deg)',opacity:0}
+    ],{duration:180,easing:'ease-out'});
+    turnAnimation.onfinish=()=>{if(turnSheet===sheet)cancelTurn();};
+  }
   const bridge = (name, ...args) => { if (window.AndroidReader && typeof AndroidReader[name] === 'function') AndroidReader[name](epoch,...args); };
   function pageAtRect(rect) { return Math.max(0, Math.floor((rect.left - viewport.getBoundingClientRect().left + viewport.scrollLeft + 1) / stride)); }
   function charPage(element, offset) {
@@ -56,12 +79,14 @@
     const element=elementFor(loc || ''); go(element ? charPage(element,offset) : 0);
   }
   function layout(loc,offset) {
+    cancelTurn();
     book.style.columnWidth=viewport.clientWidth+'px'; stride=viewport.clientWidth+48;
     book.style.setProperty('--page-height',Math.max(40,viewport.clientHeight-28)+'px');
     count=Math.max(1,Math.round((book.scrollWidth+48)/stride)); ready=true; restore(loc,offset);
   }
   window.Reader={
     async load(html,dark,font,loc,offset,token) {
+      cancelTurn();
       epoch=token; const ownEpoch=token; ready=false; viewport.scrollLeft=0; page=0;
       document.documentElement.classList.toggle('dark',dark); book.style.fontSize=font+'px';
       book.innerHTML=html; current={loc,offset};
@@ -73,14 +98,15 @@
       if(ownEpoch!==epoch)return;
       requestAnimationFrame(()=>{if(ownEpoch===epoch)layout(loc,offset);});
     },
-    page(target) { go(target); },
+    page(target) { cancelTurn();go(target); },
     turn(delta) {
       if(!ready)return;
       if(page+delta<0 || page+delta>=count) bridge('boundary',delta);
-      else { bridge('manual'); go(page+delta); }
+      else { bridge('manual'); animateTurn(delta);go(page+delta); }
     },
-    locate(loc,offset=0) { restore(loc,offset); },
+    locate(loc,offset=0) { cancelTurn();restore(loc,offset); },
     speak(chunk,offset=0) {
+      cancelTurn();
       book.querySelectorAll('.speaking').forEach(e=>e.classList.remove('speaking'));
       const el=document.getElementById('c'+chunk);
       if(el) { el.classList.add('speaking'); go(charPage(el,offset)); }

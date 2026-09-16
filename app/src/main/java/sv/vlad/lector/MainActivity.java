@@ -104,9 +104,14 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
             TextView placeholder=text("EPUB\n\n"+books.get(id).substring(0,Math.min(1,books.get(id).length())),22,Color.WHITE);
             placeholder.setGravity(Gravity.CENTER);placeholder.setBackgroundColor(teal());cover.addView(placeholder,new FrameLayout.LayoutParams(-1,-1));
             ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);cover.addView(image,new FrameLayout.LayoutParams(-1,-1));
-            String coverPath=prefs.getString("cover:"+id,"");
-            if(!coverPath.isEmpty())images.execute(()->{
+            images.execute(()->{
                 try {
+                    String coverPath=prefs.getString("cover:"+id,"");
+                    if(prefs.getInt("coverVersion:"+id,0)<3) {
+                        coverPath=EpubReader.findCover(new File(getFilesDir(),id));
+                        prefs.edit().putString("cover:"+id,coverPath).putInt("coverVersion:"+id,3).apply();
+                    }
+                    if(coverPath.isEmpty())return;
                     byte[] bytes=EpubReader.asset(new File(getFilesDir(),id),coverPath);
                     BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
                     options.inSampleSize=1;while(options.outWidth/options.inSampleSize>360 || options.outHeight/options.inSampleSize>480)options.inSampleSize*=2;

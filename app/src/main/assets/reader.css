@@ -4,15 +4,16 @@ html.dark { color-scheme:dark; --bg:#10181b; --fg:#e0e6e5; --muted:#90a4a8; --ac
 html,body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--fg); }
 body { -webkit-text-size-adjust:100%; font-family:Georgia,'Times New Roman',serif; }
 #viewport { position:absolute; left:24px; right:24px; top:24px; bottom:36px; overflow:hidden; }
-#book { height:100%; width:100%; column-fill:auto; column-gap:48px; font-size:20px; line-height:1.55; overflow-wrap:anywhere; text-align:left; }
-#book p,#book div { margin:0 0 .85em; }
-#book h1,#book h2,#book h3 { line-height:1.25; break-after:avoid; margin:.4em 0 .8em; }
-#book h1 { font-size:1.5em; } #book h2 { font-size:1.3em; } #book h3 { font-size:1.1em; }
-#book img { display:block; max-width:100%; max-height:var(--page-height); width:auto; height:auto; object-fit:contain; margin:12px auto; break-inside:avoid; }
-#book figure { margin:0; break-inside:avoid; } #book figcaption { font-size:.85em; text-align:center; }
-#book blockquote { margin:1em; font-style:italic; }
-#book table { max-width:100%; width:100%; table-layout:fixed; border-collapse:collapse; }
-#book th,#book td { border:1px solid var(--muted); padding:.3em; }
-#book .speaking { background:var(--accent); border-radius:3px; }
+:is(#book,.turn-book) { height:100%; width:100%; column-fill:auto; column-gap:48px; font-size:20px; line-height:1.55; overflow-wrap:anywhere; text-align:left; }
+:is(#book,.turn-book) p,:is(#book,.turn-book) div { margin:0 0 .85em; }
+:is(#book,.turn-book) h1,:is(#book,.turn-book) h2,:is(#book,.turn-book) h3 { line-height:1.25; break-after:avoid; margin:.4em 0 .8em; }
+:is(#book,.turn-book) h1 { font-size:1.5em; } :is(#book,.turn-book) h2 { font-size:1.3em; } :is(#book,.turn-book) h3 { font-size:1.1em; }
+:is(#book,.turn-book) img { display:block; max-width:100%; max-height:var(--page-height); width:auto; height:auto; object-fit:contain; margin:12px auto; break-inside:avoid; }
+:is(#book,.turn-book) figure { margin:0; break-inside:avoid; } :is(#book,.turn-book) figcaption { font-size:.85em; text-align:center; }
+:is(#book,.turn-book) blockquote { margin:1em; font-style:italic; }
+:is(#book,.turn-book) table { max-width:100%; width:100%; table-layout:fixed; border-collapse:collapse; }
+:is(#book,.turn-book) th,:is(#book,.turn-book) td { border:1px solid var(--muted); padding:.3em; }
+:is(#book,.turn-book) .speaking { background:var(--accent); border-radius:3px; }
 #counter { position:absolute; bottom:8px; left:12px; right:12px; text-align:center; color:var(--muted); font:12px sans-serif; pointer-events:none; }
 ::selection { background:#558a98; color:white; }
+.turn-sheet { position:fixed; overflow:hidden; pointer-events:none; background:var(--bg); z-index:5; backface-visibility:hidden; box-shadow:8px 0 24px #0005; }

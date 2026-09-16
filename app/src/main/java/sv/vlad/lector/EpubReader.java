@@ -38,6 +38,59 @@ public final class EpubReader {
     }
     static final int ENTRY_LIMIT = 4 * 1024 * 1024;
     static final int TEXT_LIMIT = 16 * 1024 * 1024;
+    public static String findCover(File file) throws IOException {
+        try (ZipFile zip = new ZipFile(file)) {
+            Element root = xml(zip, "META-INF/container.xml").selectFirst("rootfile");
+            if (root == null) return "";
+            String opf = root.attr("full-path");
+            return findCover(zip, opf, xml(zip, opf));
+        }
+    }
+    private static String findCover(ZipFile zip, String opf, Document doc) {
+        List<String> candidates = new ArrayList<>();
+        Map<String, Element> items = new LinkedHashMap<>();
+        for (Element item : doc.select("manifest > item")) {
+            items.put(item.id(), item);
+            if (Arrays.asList(item.attr("properties").split("\\s+")).contains("cover-image")) candidates.add(item.attr("href"));
+        }
+        for (Element meta : doc.select("meta[name=cover]")) {
+            Element item = items.get(meta.attr("content"));
+            candidates.add(item == null ? meta.attr("content") : item.attr("href"));
+        }
+        for (Element ref : doc.select("guide > reference"))
+            if (Arrays.asList(ref.attr("type").split("\\s+")).contains("cover")) candidates.add(ref.attr("href"));
+        for (Element item : items.values()) {
+            String name = (item.id() + " " + item.attr("href")).toLowerCase(Locale.ROOT);
+            if (name.contains("cover") || name.contains("portada")) candidates.add(item.attr("href"));
+        }
+        Element first = doc.selectFirst("spine > itemref");
+        if (first != null && items.containsKey(first.attr("idref"))) candidates.add(items.get(first.attr("idref")).attr("href"));
+        for (String href : candidates) {
+            try {
+                if (href.isEmpty()) continue;
+                String result = coverImage(zip, resolve(opf, href), new HashSet<>(), 0);
+                if (!result.isEmpty()) return result;
+            } catch (IOException ignored) { /* Optional, malformed cover must not prevent reading. */ }
+        }
+        return "";
+    }
+    private static String coverImage(ZipFile zip, String path, Set<String> visited, int depth) throws IOException {
+        if (depth > 3 || !visited.add(path) || zip.getEntry(path) == null) return "";
+        String lower = path.toLowerCase(Locale.ROOT);
+        if (lower.matches(".*\\.(jpg|jpeg|png|webp|gif|bmp)$")) return path;
+        if (!lower.matches(".*\\.(html|xhtml|htm|svg|xml)$")) return "";
+        Document wrapper = xml(zip, path);
+        for (Element image : wrapper.select("img, image, object")) {
+            String href = image.hasAttr("src") ? image.attr("src") : image.hasAttr("href") ? image.attr("href") :
+                image.hasAttr("xlink:href") ? image.attr("xlink:href") : image.attr("data");
+            if (href.isEmpty()) continue;
+            try {
+                String result = coverImage(zip, resolve(path, href), visited, depth + 1);
+                if (!result.isEmpty()) return result;
+            } catch (IOException ignored) { }
+        }
+        return "";
+    }
     /** Bounded asset reads; ZIP contents never get extracted as filesystem paths. */
     public static byte[] asset(File file, String path) throws IOException {
         try (ZipFile zip = new ZipFile(file)) { return read(zip, path); }
@@ -81,12 +134,7 @@ public final class EpubReader {
             Element author = packageDoc.getElementsByTag("dc:creator").first();
             Map<String, Element> manifest = new HashMap<>();
             for (Element item : packageDoc.select("manifest > item")) manifest.put(item.id(), item);
-            String cover = "";
-            for (Element item : manifest.values()) if (Arrays.asList(item.attr("properties").split(" ")).contains("cover-image"))
-                cover = resolve(opf, item.attr("href"));
-            Element coverMeta = packageDoc.selectFirst("meta[name=cover]");
-            if (cover.isEmpty() && coverMeta != null && manifest.containsKey(coverMeta.attr("content")))
-                cover = resolve(opf, manifest.get(coverMeta.attr("content")).attr("href"));
+            String cover = findCover(zip, opf, packageDoc);
             List<Chapter> chapters = new ArrayList<>(); int total = 0;
             for (Element ref : packageDoc.select("spine > itemref")) {
                 if ("no".equals(ref.attr("linear"))) continue;
