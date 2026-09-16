@@ -24,7 +24,17 @@ const assets = path.join(__dirname, '../app/src/main/assets');
   await page.waitForFunction(()=>Reader.snapshot().count>5);
   let first=await page.evaluate(()=>Reader.snapshot());
   assert.equal(first.page,0);assert(first.count>5);
-  await page.evaluate(()=>Reader.turn(1));
+  const transition=await page.evaluate(()=>{
+    Reader.turn(1);
+    const sheet=document.querySelector('.turn-sheet');
+    return {active:!!sheet,ids:sheet.querySelectorAll('[id]').length,
+      width:sheet.clientWidth,originalWidth:document.getElementById('viewport').clientWidth,
+      font:getComputedStyle(sheet.firstChild).fontSize,originalFont:getComputedStyle(document.getElementById('book')).fontSize};
+  });
+  assert(transition.active,'manual turn creates a visible sheet');
+  assert.equal(transition.ids,0,'overlay does not duplicate reader IDs');
+  assert.equal(transition.width,transition.originalWidth);
+  assert.equal(transition.font,transition.originalFont);
   assert.equal((await page.evaluate(()=>Reader.snapshot())).page,1);
   await page.waitForTimeout(230);
   assert.equal(await page.locator('.turn-sheet').count(),0,'turn overlay is removed');
