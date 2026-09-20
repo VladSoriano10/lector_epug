@@ -47,7 +47,7 @@ public class ReaderService extends Service {
         wake = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "lector:voz");
         getSystemService(NotificationManager.class).createNotificationChannel(
             new NotificationChannel("reading", "Lectura en voz alta", NotificationManager.IMPORTANCE_LOW));
-        session = new MediaSession(this, "Lector EPUB");
+        session = new MediaSession(this, "VladER");
         session.setCallback(new MediaSession.Callback() {
             @Override public void onPlay() { play(); }
             @Override public void onPause() { pause(); }
@@ -290,7 +290,7 @@ public class ReaderService extends Service {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class)
             .setAction("sv.vlad.lector.RESUME").addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, "reading").setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle(book == null ? "Lector EPUB" : book.title)
+            .setContentTitle(book == null ? "VladER" : book.title)
             .setContentText(book == null ? "Preparando lectura" : book.chapters.get(chapter).title)
             .setContentIntent(open).setOngoing(playing).setOnlyAlertOnce(true)
             .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_previous, "Anterior", command("PREVIOUS")).build())

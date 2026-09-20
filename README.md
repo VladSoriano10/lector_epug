@@ -1,6 +1,8 @@
-# Lector EPUB · Android
+# VladER · Android
 
-Versión 0.3.1: corrige el inicio de voz desde el texto visible y añade margen interior para evitar recortes. Conserva icono adaptativo, portadas y giro de página. Android 8 o superior; dispositivo de prueba: Redmi Note 11 con Android 13.
+Versión 0.3.2: nombre visible **VladER**, páginas posicionadas mediante transformación (sin scroll horizontal nativo) y canal de APK con firma permanente. Conserva voz desde el texto visible, icono, portadas y giro de página. Android 8 o superior; dispositivo de prueba: Redmi Note 11 con Android 13. La corrección del recorte debe comprobarse también en ese dispositivo.
+
+**Para actualizar sin desinstalar:** completa una vez [la configuración de firma privada](docs/FIRMA.md). Luego usa **VladER - APK con firma permanente**, no el APK debug de pruebas. La clave no se incluye en el repositorio; la firma queda pendiente hasta guardar los secretos y ejecutar ese workflow. El cambio desde la antigua firma debug puede requerir una última reinstalación, con pérdida de datos locales.
 
 El botón **Escuchar** consulta la página actual antes de iniciar y lee desde su primer carácter de texto visible (también al volver a pulsarlo tras una pausa). Si la página solo contiene imágenes, busca el texto siguiente. La notificación conserva la reanudación de audio. La pantalla sigue los rangos de palabras si el motor TTS proporciona `onRangeStart`; en motores sin ese evento conserva el seguimiento por fragmentos. No se usan supuestos números de página del EPUB: se calcula sobre la maquetación actual del teléfono.
 

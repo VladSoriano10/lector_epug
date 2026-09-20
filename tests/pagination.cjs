@@ -5,7 +5,7 @@ const {chromium} = require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES ? proc
 const assets = path.join(__dirname, '../app/src/main/assets');
 (async () => {
   const browser = await chromium.launch({headless:true});
-  const page = await browser.newPage({viewport:{width:393,height:851}});
+  const page = await browser.newPage({viewport:{width:393,height:851},deviceScaleFactor:2.75,isMobile:true,hasTouch:true});
   const reports = [];
   await page.exposeFunction('reportPosition', (...args) => reports.push(args));
   await page.addInitScript(() => {
@@ -96,11 +96,18 @@ const assets = path.join(__dirname, '../app/src/main/assets');
         window.speechRequest=null;Reader.startSpeech();
         const request=window.speechRequest;
         const v=document.getElementById('viewport');
-        const drift=Math.abs(v.scrollLeft-Reader.snapshot().page*Reader.snapshot().stride);
+        // A clipped (non-scrollable) viewport must reject native scrolling attempts.
+        v.scrollLeft=37;
+        const drift=Math.abs(v.scrollLeft);
+        const bounds=v.getBoundingClientRect();
+        const visibleRects=[...document.querySelectorAll('#book [data-chunk]')].flatMap(el=>[...el.getClientRects()])
+          .filter(r=>r.right>bounds.left && r.left<bounds.right && r.bottom>bounds.top && r.top<bounds.bottom);
+        const leftMargin=visibleRects.length?Math.min(...visibleRects.map(r=>r.left-bounds.left)):8;
         if(expected && request)Reader.speak(request.chunk,request.offset);
-        return {expected,request,drift,after:Reader.snapshot().page};
+        return {expected,request,drift,leftMargin,after:Reader.snapshot().page};
       },n);
       assert(result.drift<=1,`page ${n} must not drift or clip its left edge: ${result.drift}`);
+      assert(result.leftMargin>=7,`page ${n}, font ${font}: content enters left clipping edge (${result.leftMargin}px)`);
       if(result.expected) {
         assert(result.request,`missing speech target on page ${n}`);
         const {epoch,...actual}=result.request;
@@ -118,6 +125,7 @@ const assets = path.join(__dirname, '../app/src/main/assets');
     return Math.min(...[...document.getElementById('c0').getClientRects()].filter(r=>r.left>=bounds.left && r.left<bounds.right).map(r=>r.left-bounds.left));
   });
   assert(inset>=5,'italic text has an inner left gutter');
+  if(out)await page.screenshot({path:out});
   console.log('Pagination checks passed: page turns, content restoration, font size, theme, illustration sizing, rotation and speech target.');
   await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

@@ -2,8 +2,6 @@
 (() => {
   'use strict';
   const viewport = document.getElementById('viewport'), book = document.getElementById('book');
-  const pageEnd=document.createElement('i');
-  pageEnd.className='page-end';pageEnd.setAttribute('aria-hidden','true');viewport.appendChild(pageEnd);
   let epoch = 0, page = 0, count = 1, stride = 1, ready = false, current = {loc:'', offset:0};
   let touch = null, suppressClick = false, resizeTimer;
   let turnSheet = null, turnAnimation = null;
@@ -21,7 +19,7 @@
       transformOrigin:delta>0?'left center':'right center'});
     const copy=book.cloneNode(true);copy.removeAttribute('id');copy.classList.add('turn-book');
     copy.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
-    sheet.appendChild(copy);sheet.appendChild(pageEnd.cloneNode());document.body.appendChild(sheet);sheet.scrollLeft=viewport.scrollLeft;
+    sheet.appendChild(copy);document.body.appendChild(sheet);
     turnSheet=sheet;
     turnAnimation=sheet.animate([
       {transform:'perspective(1000px) rotateY(0deg)',opacity:1},
@@ -30,8 +28,8 @@
     turnAnimation.onfinish=()=>{if(turnSheet===sheet)cancelTurn();};
   }
   const bridge = (name, ...args) => { if (window.AndroidReader && typeof AndroidReader[name] === 'function') AndroidReader[name](epoch,...args); };
-  const INSET=6, GAP=48;
-  function pageAtRect(rect) { return Math.max(0, Math.floor((rect.left - viewport.getBoundingClientRect().left + viewport.scrollLeft - INSET + GAP/2) / stride)); }
+  const INSET=8, GAP=48;
+  function pageAtRect(rect) { return Math.max(0, Math.floor((rect.left - viewport.getBoundingClientRect().left + page*stride - INSET + GAP/2) / stride)); }
   function visibleOffset(el) {
     const node=el.firstChild;
     if(!node || node.nodeType!==3)return -1;
@@ -95,7 +93,8 @@
     bridge('position', page, count, current.loc, current.offset, current.chunk);
   }
   function go(target, notify=true) {
-    page=Math.max(0,Math.min(count-1,Number(target)||0)); viewport.scrollLeft=page*stride;
+    page=Math.max(0,Math.min(count-1,Math.trunc(Number(target)||0)));
+    book.style.transform='translateX('+(-page*stride)+'px)';
     if(notify) report();
   }
   function restore(loc, offset) {
@@ -104,18 +103,19 @@
   }
   function layout(loc,offset) {
     cancelTurn();
+    // Reset geometry before measuring after a font/viewport change.
+    page=0;book.style.transform='translateX(0px)';
     const width=viewport.clientWidth-2*INSET;
     book.style.columnWidth=width+'px'; stride=width+GAP;
     book.style.setProperty('--page-height',Math.max(40,viewport.clientHeight-28)+'px');
-    count=Math.max(1,Math.round((book.scrollWidth-2*INSET+GAP)/stride));
-    // Chromium excludes trailing multicolumn padding from overflow. Reserve a full final viewport.
-    pageEnd.style.left=((count-1)*stride+viewport.clientWidth-1)+'px';
+    count=Math.max(1,Math.round((book.scrollWidth+GAP)/stride));
     ready=true; restore(loc,offset);
   }
   window.Reader={
     async load(html,dark,font,loc,offset,token) {
       cancelTurn();
       epoch=token; const ownEpoch=token; ready=false; viewport.scrollLeft=0; page=0;
+      book.style.transform='translateX(0px)';
       document.documentElement.classList.toggle('dark',dark); book.style.fontSize=font+'px';
       book.innerHTML=html; current={loc,offset};
       book.style.columnWidth=(viewport.clientWidth-2*INSET)+'px';

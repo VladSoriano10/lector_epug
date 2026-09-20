@@ -65,6 +65,11 @@ public final class PagedReaderView extends WebView {
     private static WebResourceResponse blocked() {
         return new WebResourceResponse("text/plain","UTF-8",404,"Not found",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
     }
+    @Override protected void onScrollChanged(int left,int top,int oldLeft,int oldTop) {
+        super.onScrollChanged(left,top,oldLeft,oldTop);
+        // Pages move inside the document; native focus/selection must not pan the whole WebView.
+        if(left!=0 || top!=0)super.scrollTo(0,0);
+    }
     public void chapter(File file,EpubReader.Chapter content,int index,boolean dark,int font,String loc,int offset) {
         epub=file;chapter=index;epoch++;
         pending="Reader.load("+JSONObject.quote(content.html)+","+dark+","+font+","+JSONObject.quote(loc)+","+offset+","+epoch+")";
