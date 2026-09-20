@@ -27,6 +27,7 @@ public class ReaderService extends Service {
     private int generation;
     private String utterance = "", fileId = "";
     private int utteranceStart;
+    private final SpeechResumeState speechState = new SpeechResumeState();
     public EpubReader.Book book;
     public int chapter, chunk;
     public int loadVersion, speechOffset;
@@ -104,7 +105,7 @@ public class ReaderService extends Service {
                         if (chapter >= book.chapters.size()) {
                             chapter = book.chapters.size() - 1;
                             chunk = Math.max(0, book.chapters.get(chapter).chunks.size() - 1);
-                            pause(); status = "Libro terminado"; changed(); return;
+                            pause(); speechState.clear(); status = "Libro terminado"; changed(); return;
                         }
                         speechOffset = 0; save(); speak();
                     }); }
@@ -186,7 +187,7 @@ public class ReaderService extends Service {
     }
     private void loaded(EpubReader.Book parsed, String id) {
         if (destroyed) return;
-        book = parsed; fileId = id; busy = false;
+        book = parsed; fileId = id; busy = false; speechState.clear();
         chapter = Math.max(0, Math.min(prefs.getInt(id + ":chapter", 0), book.chapters.size() - 1));
         chunk = Math.max(0, Math.min(prefs.getInt(id + ":chunk", 0), book.chapters.get(chapter).chunks.size() - 1));
         locator = prefs.getString(id + ":locator", "chunk:" + chunk);
@@ -212,7 +213,7 @@ public class ReaderService extends Service {
     public void visualPosition(String loc, int offset, int firstChunk, int page, int pages) {
         if (book == null || busy) return;
         prefs.edit().putInt(fileId + ":page", page).putInt(fileId + ":pages", pages).apply();
-        if (playing) return;
+        if (speechState.protectsPosition(playing)) return;
         locator = loc; locatorOffset = Math.max(0, offset);
         chunk = Math.max(0, Math.min(firstChunk, book.chapters.get(chapter).chunks.size() - 1));
         speechOffset = locatorOffset; save();
@@ -233,7 +234,7 @@ public class ReaderService extends Service {
             if (audio.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                 pause(); status = "El audio está ocupado. Intenta de nuevo."; changed(); return START_NOT_STICKY;
             }
-            playing = true; speak();
+            speechState.clear(); playing = true; speak();
         } else if ("PAUSE".equals(action)) pause();
         else if ("NEXT".equals(action)) moveChapter(1);
         else if ("PREVIOUS".equals(action)) moveChapter(-1);
@@ -242,7 +243,7 @@ public class ReaderService extends Service {
     private void speak() {
         if (!playing || book == null) return;
         while (book.chapters.get(chapter).chunks.isEmpty()) {
-            if (chapter + 1 >= book.chapters.size()) { pause(); status = "Libro terminado"; changed(); return; }
+            if (chapter + 1 >= book.chapters.size()) { pause(); speechState.clear(); status = "Libro terminado"; changed(); return; }
             chapter++; chunk = 0; speechOffset = 0;
         }
         locator = "chunk:" + chunk; locatorOffset = speechOffset; save();
@@ -260,6 +261,7 @@ public class ReaderService extends Service {
         changed();
     }
     public void pause() {
+        speechState.paused(playing);
         playing = false; utterance = "";
         if (tts != null) tts.stop();
         if (wake != null && wake.isHeld()) wake.release();
@@ -271,14 +273,16 @@ public class ReaderService extends Service {
     public void moveChapter(int delta) {
         if (book != null) goChapter(Math.max(0, Math.min(chapter + delta, book.chapters.size() - 1)));
     }
+    public boolean canResumeSpeech() { return speechState.canResume(); }
+    public void manualNavigation() { pause(); speechState.clear(); }
     public void goChapter(int index) {
         if (book == null || busy) return;
-        boolean resume = playing; pause(); chapter = Math.max(0, Math.min(index, book.chapters.size() - 1));
+        boolean resume = playing; manualNavigation(); chapter = Math.max(0, Math.min(index, book.chapters.size() - 1));
         chunk = 0; speechOffset = 0; locator = ""; locatorOffset = 0; save(); changed(); if (resume) play();
     }
     public void moveChunk(int delta) {
         if (book == null || busy) return;
-        boolean resume = playing; pause();
+        boolean resume = playing; manualNavigation();
         chunk = Math.max(0, Math.min(chunk + delta, book.chapters.get(chapter).chunks.size() - 1));
         speechOffset = 0; locator = "chunk:" + chunk; locatorOffset = 0;
         save(); changed(); if (resume) play();

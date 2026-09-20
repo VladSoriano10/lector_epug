@@ -178,13 +178,13 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         root.addView(bottom,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
         LinearLayout playback=new LinearLayout(this);bottom.addView(playback);
         rowButton(playback,"◀ Página",()->web.turn(-1));
-        play=button("Escuchar",()->{if(reader.playing)reader.pause();else web.startSpeech();});playback.addView(play,new LinearLayout.LayoutParams(0,dp(48),1));
+        play=button("Escuchar",()->{if(reader.playing)reader.pause();else if(reader.canResumeSpeech())reader.play();else web.startSpeech();});playback.addView(play,new LinearLayout.LayoutParams(0,dp(48),1));
         rowButton(playback,"Página ▶",()->web.turn(1));
         pageLabel=text("",14,Color.WHITE);pageLabel.setGravity(Gravity.CENTER);bottom.addView(pageLabel);
         pageSlider=new SeekBar(this);bottom.addView(pageSlider,new LinearLayout.LayoutParams(-1,dp(40)));
         pageSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             public void onProgressChanged(SeekBar s,int value,boolean user){if(user)pageLabel.setText("Página "+(value+1)+" / "+pages);}
-            public void onStartTrackingTouch(SeekBar s){reader.pause();}
+            public void onStartTrackingTouch(SeekBar s){reader.manualNavigation();}
             public void onStopTrackingTouch(SeekBar s){web.page(s.getProgress());}
         });
         controls=false;showControls();render();
@@ -223,7 +223,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         navigating=true;reader.pause();reader.goChapter(target);nextLocator=delta<0?"end":"";
         navigating=false;shownChapter=-1;render();
     }
-    @Override public void manual(){if(reader!=null && reader.playing)reader.pause();}
+    @Override public void manual(){if(reader!=null)reader.manualNavigation();}
     @Override public void playVisible(int chapter,String loc,int offset,int chunk) {
         if(!reading || reader==null || reader.busy || reader.playing || reader.chapter!=chapter)return;
         reader.visualPosition(loc,offset,chunk,page,pages);
