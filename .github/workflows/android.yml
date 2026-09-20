@@ -34,9 +34,9 @@ jobs:
             adb shell wm size 1080x1920
             adb shell wm density 420
             gradle connectedDebugAndroidTest --no-daemon
-            adb exec-out run-as sv.vlad.lector cat files/panel-aa.png > panel-aa.png
-            adb exec-out run-as sv.vlad.lector cat files/panel-voces.png > panel-voces.png
-            adb exec-out run-as sv.vlad.lector cat files/panel-indice.png > panel-indice.png
+            adb pull /sdcard/Download/VladERTests/panel-aa.png panel-aa.png
+            adb pull /sdcard/Download/VladERTests/panel-voces.png panel-voces.png
+            adb pull /sdcard/Download/VladERTests/panel-indice.png panel-indice.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:

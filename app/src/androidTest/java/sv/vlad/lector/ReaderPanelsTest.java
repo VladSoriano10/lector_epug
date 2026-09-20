@@ -1,6 +1,8 @@
 package sv.vlad.lector;
 
 import android.content.Context;
+import android.content.ContentValues;
+import android.provider.MediaStore;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
@@ -94,7 +96,13 @@ public class ReaderPanelsTest {
                 if(close==0){
                     Bitmap bitmap=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
                     assertNotNull(bitmap);
-                    try(OutputStream out=new FileOutputStream(new File(context.getFilesDir(),"panel-"+(menu.equals("Aa")?"aa":menu.equals("Voces")?"voces":"indice")+".png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}bitmap.recycle();
+                    ContentValues values=new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME,"panel-"+(menu.equals("Aa")?"aa":menu.equals("Voces")?"voces":"indice")+".png");
+                    values.put(MediaStore.Downloads.MIME_TYPE,"image/png");
+                    values.put(MediaStore.Downloads.RELATIVE_PATH,"Download/VladERTests");
+                    Uri capture=context.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
+                    assertNotNull(capture);
+                    try(OutputStream out=context.getContentResolver().openOutputStream(capture)){assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,out));}bitmap.recycle();
                     click(scenario,"Listo");
                 }else if(close==1)click(scenario,"Cerrar panel");
                 else scenario.onActivity(MainActivity::onBackPressed);
