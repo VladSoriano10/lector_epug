@@ -7,6 +7,8 @@ import android.net.Uri;
 import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.MotionEvent;
+import android.view.InputDevice;
 import android.widget.TextView;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.core.app.ApplicationProvider;
@@ -40,7 +42,18 @@ public class ReaderPanelsTest {
         assertTrue("WebView response",latch.await(5,TimeUnit.SECONDS));return result.get();
     }
     private void click(ActivityScenario<MainActivity> scenario,String label) {
-        scenario.onActivity(a->{View v=find(a.getWindow().getDecorView(),label);assertNotNull(label,v);assertTrue(v.performClick());});
+        float[] point=new float[2];
+        scenario.onActivity(a->{View v=find(a.getWindow().getDecorView(),label);assertNotNull(label,v);assertTrue(v.isShown());int[] xy=new int[2];v.getLocationOnScreen(xy);
+            point[0]=xy[0]+(label.equals("Cerrar panel")?20:v.getWidth()/2f);
+            point[1]=xy[1]+(label.equals("Cerrar panel")?50:v.getHeight()/2f);
+        });
+        long now=SystemClock.uptimeMillis();
+        MotionEvent down=MotionEvent.obtain(now,now,MotionEvent.ACTION_DOWN,point[0],point[1],0);
+        MotionEvent up=MotionEvent.obtain(now,now+60,MotionEvent.ACTION_UP,point[0],point[1],0);
+        down.setSource(InputDevice.SOURCE_TOUCHSCREEN);up.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+        InstrumentationRegistry.getInstrumentation().sendPointerSync(down);
+        InstrumentationRegistry.getInstrumentation().sendPointerSync(up);
+        down.recycle();up.recycle();InstrumentationRegistry.getInstrumentation().waitForIdleSync();
     }
     private void entry(ZipOutputStream zip,String name,String value) throws Exception {
         zip.putNextEntry(new ZipEntry(name));zip.write(value.getBytes(StandardCharsets.UTF_8));zip.closeEntry();
