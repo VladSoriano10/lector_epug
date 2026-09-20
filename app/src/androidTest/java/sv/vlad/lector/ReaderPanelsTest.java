@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.SystemClock;
+import android.os.Build;
+import android.os.ParcelFileDescriptor;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.MotionEvent;
@@ -60,6 +62,10 @@ public class ReaderPanelsTest {
     }
     @Test public void closingEveryReaderPanelPreservesPageAndViewport() throws Exception {
         Context context=ApplicationProvider.getApplicationContext();
+        if(Build.VERSION.SDK_INT>=33)try(InputStream command=new ParcelFileDescriptor.AutoCloseInputStream(
+            InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("pm grant sv.vlad.lector android.permission.POST_NOTIFICATIONS"))) {
+            while(command.read()!=-1) { /* wait for the test-only permission grant */ }
+        }
         context.getSharedPreferences("reader",Context.MODE_PRIVATE).edit().clear().putBoolean("gestureHint",true).apply();
         File epub=new File(context.getCacheDir(),"panels-fixture.epub");
         try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(epub))) {
