@@ -127,6 +127,31 @@ const assets = path.join(__dirname, '../app/src/main/assets');
   });
   assert(inset>=5,'italic text has an inner left gutter');
   if(out)await page.screenshot({path:out});
+  // Fractional CSS viewport: a rounded stride and a fractional column used to drift.
+  await page.evaluate(async()=>{
+    const viewport=document.getElementById('viewport');viewport.style.left='24.2px';viewport.style.right='24.3px';
+    await Reader.load(Array.from({length:180},(_,i)=>'<p><span id="c'+i+'" data-chunk="'+i+'" data-loc="'+i+'">'+('fijación Ágil y lectura en español. ').repeat(18)+'</span></p>').join(''),true,24,'',0,3);
+  });
+  await page.waitForFunction(()=>Reader.snapshot().ready && Reader.snapshot().epoch===3);
+  const fractionalCount=(await page.evaluate(()=>Reader.snapshot())).count;
+  assert(fractionalCount>50,'long section covers accumulated rounding errors');
+  for(const n of [0,1,20,50,fractionalCount-1]) {
+    const margin=await page.evaluate(n=>{
+      Reader.page(n);const bounds=document.getElementById('viewport').getBoundingClientRect();
+      const rects=[...document.querySelectorAll('#book [data-chunk]')].flatMap(e=>[...e.getClientRects()]).filter(r=>r.right>bounds.left && r.left<bounds.right);
+      return Math.min(...rects.map(r=>r.left-bounds.left));
+    },n);
+    assert(margin>=7 && margin<=9,`fractional width, page ${n}: stable left gutter, got ${margin}`);
+  }
+  // A gesture begun before a panel must not finish as a page turn after dismissal.
+  const modalTest=await page.evaluate(()=>{
+    Reader.page(2);const before=Reader.snapshot();
+    const touch=(type,x)=>document.dispatchEvent(new TouchEvent(type,{touches:type==='touchstart'?[new Touch({identifier:1,target:document.body,clientX:x,clientY:200})]:[],changedTouches:[new Touch({identifier:1,target:document.body,clientX:x,clientY:200})]}));
+    touch('touchstart',300);Reader.modal(true);Reader.modal(false);touch('touchend',40);
+    return {before:before.page,after:Reader.snapshot().page,height:Reader.snapshot().height,oldHeight:before.height};
+  });
+  assert.equal(modalTest.before,modalTest.after,'panel dismissal cancels stale swipe');
+  assert.equal(modalTest.height,modalTest.oldHeight);
   console.log('Pagination checks passed: page turns, content restoration, font size, theme, illustration sizing, rotation and speech target.');
   await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

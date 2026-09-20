@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.net.Uri;
 import android.webkit.*;
+import android.view.MotionEvent;
+import android.os.SystemClock;
 import java.io.*;
 import java.util.*;
 import org.json.JSONObject;
@@ -24,6 +26,8 @@ public final class PagedReaderView extends WebView {
     private boolean shellReady;
     private int epoch, chapter;
     private String pending = "";
+    private boolean readerModal;
+    private long inputBlockedUntil;
     public PagedReaderView(Context context, Listener listener) {
         super(context); this.listener=listener;
         getSettings().setJavaScriptEnabled(true);
@@ -82,6 +86,15 @@ public final class PagedReaderView extends WebView {
     public void appearance(boolean dark,int font) { evaluateJavascript("Reader.appearance("+dark+","+font+")",null); }
     public void clearSpeech() { evaluateJavascript("Reader.clearSpeech()",null); }
     public void startSpeech() { evaluateJavascript("Reader.startSpeech()",null); }
+    public void readerModal(boolean open) {
+        readerModal=open;
+        if(!open)inputBlockedUntil=SystemClock.uptimeMillis()+350;
+        evaluateJavascript("Reader.modal("+open+")",null);
+    }
+    @Override public boolean onTouchEvent(MotionEvent event) {
+        if(readerModal || SystemClock.uptimeMillis()<inputBlockedUntil)return true;
+        return super.onTouchEvent(event);
+    }
     private final class Bridge {
         private void dispatch(int token,Runnable task) { post(()->{if(token==epoch)task.run();}); }
         @JavascriptInterface public void position(int token,int page,int pages,String loc,int offset,int chunk) {

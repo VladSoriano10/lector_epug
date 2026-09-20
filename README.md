@@ -1,6 +1,6 @@
 # VladER · Android
 
-Versión 0.3.2: nombre visible **VladER**, páginas posicionadas mediante transformación (sin scroll horizontal nativo) y canal de APK con firma permanente. Conserva voz desde el texto visible, icono, portadas y giro de página. Android 8 o superior; dispositivo de prueba: Redmi Note 11 con Android 13. La corrección del recorte debe comprobarse también en ese dispositivo.
+Versión 0.3.3: contenedor de texto con ancho entero compartido por la columna y el avance, para evitar deriva en pantallas con medidas fraccionarias. Índice, voces, velocidad y Aa usan paneles propios dentro de la misma ventana, sin redimensionar el lector al abrir/cerrar y con bloqueo de gestos residuales. Conserva voz, pausa/reanudación, ilustraciones y firma permanente. Android 8 o superior; falta confirmar el resultado en el Redmi Note 11 con los EPUB concretos del usuario.
 
 **Para actualizar sin desinstalar:** completa una vez [la configuración de firma privada](docs/FIRMA.md). Luego usa **VladER - APK con firma permanente**, no el APK debug de pruebas. La clave no se incluye en el repositorio; la firma queda pendiente hasta guardar los secretos y ejecutar ese workflow. El cambio desde la antigua firma debug puede requerir una última reinstalación, con pérdida de datos locales.
 
