@@ -151,7 +151,7 @@
       layout(saved.loc,saved.offset);
     },
     clearSpeech() { book.querySelectorAll('.speaking').forEach(e=>e.classList.remove('speaking')); },
-    snapshot() {return {page,count,stride,position:firstVisible(),height:viewport.clientHeight,width:viewport.clientWidth};}
+    snapshot() {return {ready,epoch,page,count,stride,position:firstVisible(),height:viewport.clientHeight,width:viewport.clientWidth};}
   };
   window.addEventListener('resize',()=>{clearTimeout(resizeTimer);const saved={...current};resizeTimer=setTimeout(()=>{if(ready)layout(saved.loc,saved.offset);},100);});
   document.addEventListener('touchstart',e=>{if(e.touches.length===1)touch={x:e.touches[0].clientX,y:e.touches[0].clientY,time:Date.now()};},{passive:true});

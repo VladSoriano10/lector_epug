@@ -118,8 +118,9 @@ const assets = path.join(__dirname, '../app/src/main/assets');
   }
   // A long italic paragraph crosses columns, keeping a gutter around the glyphs.
   await page.evaluate(async()=>Reader.load('<p><em><span id="c0" data-chunk="0" data-loc="0">'+('fijación Ágil y lectura en español. ').repeat(180)+'</span></em></p>',true,24,'',0,2));
-  await page.waitForFunction(()=>Reader.snapshot().count>2);
+  await page.waitForFunction(()=>Reader.snapshot().ready && Reader.snapshot().epoch===2 && Reader.snapshot().count>2);
   await page.evaluate(()=>Reader.page(1));
+  assert.equal((await page.evaluate(()=>Reader.snapshot())).page,1,'italic test measures the second page, not a pending load');
   const inset=await page.evaluate(()=>{
     const bounds=document.getElementById('viewport').getBoundingClientRect();
     return Math.min(...[...document.getElementById('c0').getClientRects()].filter(r=>r.left>=bounds.left && r.left<bounds.right).map(r=>r.left-bounds.left));
