@@ -5,6 +5,7 @@
   let epoch = 0, page = 0, count = 1, stride = 1, ready = false, current = {loc:'', offset:0};
   let touch = null, suppressClick = false, resizeTimer;
   let turnSheet = null, turnAnimation = null;
+  let modalOpen=false, ignoreInputUntil=0;
   function cancelTurn() {
     if(turnAnimation)turnAnimation.cancel();
     if(turnSheet)turnSheet.remove();
@@ -29,6 +30,13 @@
   }
   const bridge = (name, ...args) => { if (window.AndroidReader && typeof AndroidReader[name] === 'function') AndroidReader[name](epoch,...args); };
   const INSET=8, GAP=48;
+  function measurePage() {
+    // CSS percentages can be fractional on Android. Use the SAME integer width for
+    // the actual column and its translation; never mix clientWidth with calc().
+    const width=Math.max(32,Math.floor(viewport.getBoundingClientRect().width-2*INSET));
+    book.style.width=width+'px';book.style.columnWidth=width+'px';stride=width+GAP;
+    book.style.setProperty('--page-height',Math.max(40,viewport.clientHeight-28)+'px');
+  }
   function pageAtRect(rect) { return Math.max(0, Math.floor((rect.left - viewport.getBoundingClientRect().left + page*stride - INSET + GAP/2) / stride)); }
   function visibleOffset(el) {
     const node=el.firstChild;
@@ -105,9 +113,7 @@
     cancelTurn();
     // Reset geometry before measuring after a font/viewport change.
     page=0;book.style.transform='translateX(0px)';
-    const width=viewport.clientWidth-2*INSET;
-    book.style.columnWidth=width+'px'; stride=width+GAP;
-    book.style.setProperty('--page-height',Math.max(40,viewport.clientHeight-28)+'px');
+    measurePage();
     count=Math.max(1,Math.round((book.scrollWidth+GAP)/stride));
     ready=true; restore(loc,offset);
   }
@@ -118,8 +124,7 @@
       book.style.transform='translateX(0px)';
       document.documentElement.classList.toggle('dark',dark); book.style.fontSize=font+'px';
       book.innerHTML=html; current={loc,offset};
-      book.style.columnWidth=(viewport.clientWidth-2*INSET)+'px';
-      book.style.setProperty('--page-height',Math.max(40,viewport.clientHeight-28)+'px');
+      measurePage();
       await Promise.all([...book.querySelectorAll('img')].map(img=>img.complete?Promise.resolve():new Promise(resolve=>{
         img.onload=resolve; img.onerror=()=>{img.alt=img.alt||'Ilustración no disponible';resolve();};
       })));
@@ -127,6 +132,10 @@
       requestAnimationFrame(()=>{if(ownEpoch===epoch)layout(loc,offset);});
     },
     page(target) { cancelTurn();go(target); },
+    modal(open) {
+      modalOpen=open;touch=null;suppressClick=false;cancelTurn();
+      if(!open)ignoreInputUntil=Date.now()+350;
+    },
     startSpeech() {
       if(!ready)return;
       cancelTurn();
@@ -154,13 +163,14 @@
     snapshot() {return {ready,epoch,page,count,stride,position:firstVisible(),height:viewport.clientHeight,width:viewport.clientWidth};}
   };
   window.addEventListener('resize',()=>{clearTimeout(resizeTimer);const saved={...current};resizeTimer=setTimeout(()=>{if(ready)layout(saved.loc,saved.offset);},100);});
-  document.addEventListener('touchstart',e=>{if(e.touches.length===1)touch={x:e.touches[0].clientX,y:e.touches[0].clientY,time:Date.now()};},{passive:true});
+  document.addEventListener('touchstart',e=>{touch=null;if(!modalOpen && Date.now()>=ignoreInputUntil && e.touches.length===1)touch={x:e.touches[0].clientX,y:e.touches[0].clientY,time:Date.now()};},{passive:true});
+  document.addEventListener('touchcancel',()=>{touch=null;},{passive:true});
   document.addEventListener('touchend',e=>{
-    if(!touch)return;const t=e.changedTouches[0],dx=t.clientX-touch.x,dy=t.clientY-touch.y;
+    if(modalOpen || Date.now()<ignoreInputUntil || !touch){touch=null;return;}const t=e.changedTouches[0],dx=t.clientX-touch.x,dy=t.clientY-touch.y;
     if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.4 && Date.now()-touch.time<800) {
       suppressClick=true;Reader.turn(dx<0?1:-1);setTimeout(()=>suppressClick=false,400);
     }
     touch=null;
   },{passive:true});
-  document.addEventListener('click',()=>{if(!suppressClick && !String(window.getSelection()))bridge('toggle');});
+  document.addEventListener('click',()=>{if(!modalOpen && Date.now()>=ignoreInputUntil && !suppressClick && !String(window.getSelection()))bridge('toggle');});
 })();

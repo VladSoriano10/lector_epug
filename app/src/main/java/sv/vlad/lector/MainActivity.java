@@ -29,6 +29,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     private Button play;
     private SeekBar pageSlider;
     private PagedReaderView web;
+    private FrameLayout sheetOverlay;
     private final ExecutorService images=Executors.newSingleThreadExecutor();
     private int libraryGeneration;
     private final ServiceConnection connection=new ServiceConnection() {
@@ -71,6 +72,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         getWindow().getDecorView().setSystemUiVisibility(value ? View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY:0);
     }
     private void buildHome() {
+        closeSheet();
         reading=false;libraryGeneration++;disposeWeb();fullscreen(false);
         root=new FrameLayout(this);root.setBackgroundColor(background());setContentView(root);
         home=column();root.addView(home,new FrameLayout.LayoutParams(-1,-1));
@@ -165,6 +167,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     }
     private void showReader() {
         if(reader==null || reader.book==null)return;
+        closeSheet();
         reading=true;libraryGeneration++;disposeWeb();fullscreen(true);shownId="";shownChapter=-1;lastSpoken=-1;
         root=new FrameLayout(this);root.setBackgroundColor(background());setContentView(root);
         web=new PagedReaderView(this,this);root.addView(web,new FrameLayout.LayoutParams(-1,-1));
@@ -240,40 +243,94 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         setTheme(dark?android.R.style.Theme_Material_NoActionBar:android.R.style.Theme_Material_Light_NoActionBar);
         if(reading){web.appearance(dark,font);root.setBackgroundColor(background());}else buildHome();}
     private void appearance(){
-        LinearLayout panel=column();panel.setPadding(dp(24),dp(12),dp(24),dp(12));
-        Switch mode=new Switch(this);mode.setText("Modo oscuro");mode.setChecked(dark);panel.addView(mode);
+        LinearLayout panel=openSheet("Tu lectura", "Ajusta el texto y la voz a tu ritmo");
+        Switch mode=new Switch(this);mode.setText("Modo oscuro");mode.setTextColor(foreground());mode.setChecked(dark);mode.setPadding(dp(8),dp(8),dp(8),dp(16));panel.addView(mode);
+        TextView preview=text("Un libro, muchas formas de imaginar.",font,foreground());preview.setTypeface(Typeface.SERIF);preview.setPadding(dp(16),dp(20),dp(16),dp(20));preview.setBackground(rounded(dark?0xFF17373F:0xFFEDF4F2,16));panel.addView(preview);
         TextView size=text("Tamaño de letra: "+font,16,foreground());panel.addView(size);
-        SeekBar slider=new SeekBar(this);slider.setMax(18);slider.setProgress(font-16);panel.addView(slider);
-        mode.setOnCheckedChangeListener((b,value)->{if(value!=dark)toggleTheme();});
+        size.setPadding(dp(4),dp(20),0,dp(4));
+        SeekBar slider=new SeekBar(this);slider.setMax(18);slider.setProgress(font-16);slider.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF31B5AD));slider.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFF31B5AD));panel.addView(slider,new LinearLayout.LayoutParams(-1,dp(48)));
+        mode.setOnCheckedChangeListener((b,value)->{if(value!=dark){toggleTheme();appearance();}});
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            public void onProgressChanged(SeekBar s,int value,boolean user){if(user){font=value+16;size.setText("Tamaño de letra: "+font);}}
+            public void onProgressChanged(SeekBar s,int value,boolean user){if(user){font=value+16;size.setText("Tamaño de letra: "+font);preview.setTextSize(font);}}
             public void onStartTrackingTouch(SeekBar s){}
             public void onStopTrackingTouch(SeekBar s){prefs.edit().putInt("font",font).apply();if(web!=null)web.appearance(dark,font);}
         });
-        new AlertDialog.Builder(this).setTitle("Lectura").setView(panel).setPositiveButton("Listo",null).setNeutralButton("Velocidad de voz",(d,n)->speed()).show();
+        sheetRow(panel,"Velocidad de voz",reader==null?"Configura tu narración":String.format(Locale.ROOT,"%.2f× · Ajustar ritmo",reader.rate()),false,this::speed);
     }
-    private void speed(){if(reader==null)return;String[] labels={"0.75×","1× · Normal","1.25×","1.5×","1.75×","2×"};float[] values={.75f,1,1.25f,1.5f,1.75f,2};new AlertDialog.Builder(this).setTitle("Velocidad").setItems(labels,(d,n)->reader.setRate(values[n])).show();}
+    private void speed(){
+        if(reader==null)return;
+        LinearLayout panel=openSheet("Ritmo de narración","Elige una velocidad cómoda para escuchar");
+        String[] labels={"0.75×","1×","1.25×","1.5×","1.75×","2×"};String[] hints={"Con calma","Normal","Un poco más rápido","Ágil","Rápido","Muy rápido"};float[] values={.75f,1,1.25f,1.5f,1.75f,2};
+        for(int n=0;n<labels.length;n++){final float rate=values[n];sheetRow(panel,labels[n],hints[n],Math.abs(reader.rate()-rate)<.01,()->{reader.setRate(rate);closeSheet();});}
+    }
     private void chapters(){
         if(reader==null || reader.book==null || reader.busy)return;
         List<EpubReader.TocEntry> entries=reader.book.toc;
-        new AlertDialog.Builder(this).setTitle("Índice del libro").setItems(entries.stream().map(e->e.title).toArray(String[]::new),(d,n)->{
-            EpubReader.TocEntry entry=entries.get(n);navigating=true;reader.pause();reader.goChapter(entry.chapter);
-            nextLocator=entry.anchor.isEmpty()?"":"anchor:"+entry.anchor;navigating=false;shownChapter=-1;render();controls=false;showControls();
-        }).show();
+        LinearLayout panel=openSheet("Índice",reader.book.title);
+        for(int n=0;n<entries.size();n++) {
+            EpubReader.TocEntry entry=entries.get(n);
+            sheetRow(panel,entry.title,"Sección "+(entry.chapter+1),reader.chapter==entry.chapter,()->{
+                closeSheet();navigating=true;reader.pause();reader.goChapter(entry.chapter);
+                nextLocator=entry.anchor.isEmpty()?"":"anchor:"+entry.anchor;navigating=false;shownChapter=-1;render();controls=false;showControls();
+            });
+        }
     }
     private void voiceMenu(){
         if(reader==null)return;
-        new AlertDialog.Builder(this).setTitle("Voces en español").setItems(new String[]{"Elegir motor instalado","Elegir voz sin conexión","Ajustes de voz de Android","Velocidad de lectura"},(d,n)->{
-            if(n==0){List<TextToSpeech.EngineInfo> engines=reader.engines();new AlertDialog.Builder(this).setTitle("Motor de voz").setItems(engines.stream().map(e->e.label).toArray(String[]::new),(a,i)->reader.initEngine(engines.get(i).name)).show();}
-            else if(n==1){List<Voice> voices=reader.voices();if(voices.isEmpty()){message("Voces locales","Descarga una voz en español en tu motor TTS y vuelve a seleccionarlo.");return;}
-                new AlertDialog.Builder(this).setTitle("Voz local").setItems(voices.stream().map(v->v.getLocale().getDisplayName(new Locale("es"))+"\n"+v.getName()).toArray(String[]::new),(a,i)->reader.selectVoice(voices.get(i))).show();}
-            else if(n==2){try{startActivity(new Intent("com.android.settings.TTS_SETTINGS"));}catch(ActivityNotFoundException e){startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS));}}
-            else speed();
-        }).show();
+        LinearLayout panel=openSheet("Voces","Tu narración, en español");
+        sheetRow(panel,"Motor de voz","Aplicaciones de voz instaladas",false,()->{
+            LinearLayout choices=openSheet("Motor de voz","Selecciona la aplicación que narrará tus libros");
+            List<TextToSpeech.EngineInfo> engines=reader.engines();
+            if(engines.isEmpty())choices.addView(text("No hay motores de voz disponibles.",16,muted()));
+            for(TextToSpeech.EngineInfo engine:engines)sheetRow(choices,engine.label,engine.name,engine.name.equals(prefs.getString("engine","")),()->{reader.initEngine(engine.name);closeSheet();});
+        });
+        sheetRow(panel,"Voz sin conexión","Voces locales disponibles en español",false,()->{
+            LinearLayout choices=openSheet("Voz sin conexión","Escucha con una voz descargada");
+            List<Voice> voices=reader.voices();
+            if(voices.isEmpty())choices.addView(text("Descarga una voz en español en tu motor y vuelve a seleccionarlo.",16,muted()));
+            for(Voice voice:voices)sheetRow(choices,voice.getLocale().getDisplayName(new Locale("es")),voice.getName(),voice.getName().equals(prefs.getString("voice:"+prefs.getString("engine",""),"")),()->{reader.selectVoice(voice);closeSheet();});
+        });
+        sheetRow(panel,"Velocidad de lectura",String.format(Locale.ROOT,"%.2f× · Ajustar ritmo",reader.rate()),false,this::speed);
+        sheetRow(panel,"Ajustes de Android","Descargar y administrar voces",false,()->{closeSheet();try{startActivity(new Intent("com.android.settings.TTS_SETTINGS"));}catch(ActivityNotFoundException e){startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS));}});
+    }
+    private GradientDrawable rounded(int color,int radius){GradientDrawable bg=new GradientDrawable();bg.setColor(color);bg.setCornerRadius(dp(radius));return bg;}
+    private LinearLayout openSheet(String title,String subtitle) {
+        if(sheetOverlay!=null)root.removeView(sheetOverlay);
+        if(web!=null){web.readerModal(true);web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);}
+        sheetOverlay=new FrameLayout(this);sheetOverlay.setClickable(true);
+        View scrim=new View(this);scrim.setBackgroundColor(0x99000000);scrim.setContentDescription("Cerrar panel");scrim.setOnClickListener(v->closeSheet());sheetOverlay.addView(scrim,new FrameLayout.LayoutParams(-1,-1));
+        LinearLayout card=column();card.setClickable(true);card.setPadding(dp(20),dp(12),dp(20),dp(16));card.setBackground(rounded(dark?0xFF102C34:0xFFFAFCF9,24));card.setElevation(dp(16));
+        int height=root.getHeight()>0?root.getHeight():getResources().getDisplayMetrics().heightPixels;
+        int width=root.getWidth()>0?root.getWidth():getResources().getDisplayMetrics().widthPixels;
+        FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(Math.min(dp(560),width-dp(24)),Math.min(dp(640),(int)(height*.82)),Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);cp.bottomMargin=dp(12);sheetOverlay.addView(card,cp);
+        View handle=new View(this);handle.setBackground(rounded(dark?0xFF4D737B:0xFFB4C8C9,4));LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(dp(36),dp(4));hp.gravity=Gravity.CENTER_HORIZONTAL;hp.bottomMargin=dp(14);card.addView(handle,hp);
+        TextView brand=text("VLADER  /  LECTURA",11,muted());brand.setLetterSpacing(.14f);card.addView(brand);
+        TextView name=text(title,26,foreground());name.setTypeface(null,Typeface.BOLD);name.setPadding(0,dp(6),0,dp(4));if(Build.VERSION.SDK_INT>=28)name.setAccessibilityHeading(true);card.addView(name);
+        TextView hint=text(subtitle,14,muted());hint.setMaxLines(2);hint.setPadding(0,0,0,dp(18));card.addView(hint);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);card.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout body=column();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
+        Button done=button("Listo",this::closeSheet);done.setBackground(rounded(teal(),16));LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-1,dp(48));bp.topMargin=dp(12);card.addView(done,bp);
+        root.addView(sheetOverlay,new FrameLayout.LayoutParams(-1,-1));
+        return body;
+    }
+    private void sheetRow(LinearLayout parent,String title,String subtitle,boolean selected,Runnable action){
+        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(16),dp(14),dp(16),dp(14));row.setMinimumHeight(dp(66));
+        int color=selected?(dark?0xFF174952:0xFFD7EFEB):(dark?0xFF193840:0xFFF0F5F2);
+        row.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x3331B5AD),rounded(color,16),null));
+        LinearLayout labels=column();TextView primary=text(title,16,foreground());primary.setTypeface(null,selected?Typeface.BOLD:Typeface.NORMAL);labels.addView(primary);
+        TextView secondary=text(subtitle,12,muted());secondary.setPadding(0,dp(4),0,0);labels.addView(secondary);row.addView(labels,new LinearLayout.LayoutParams(0,-2,1));
+        TextView mark=text(selected?"✓":"›",24,selected?0xFF31B5AD:muted());mark.setPadding(dp(12),0,0,0);row.addView(mark);
+        row.setContentDescription(title+". "+subtitle+(selected?". Seleccionado":""));row.setFocusable(true);row.setOnClickListener(v->action.run());
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(8);parent.addView(row,lp);
+    }
+    private void closeSheet(){
+        if(sheetOverlay==null)return;
+        root.removeView(sheetOverlay);sheetOverlay=null;
+        if(web!=null){web.readerModal(false);web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}
     }
     private void message(String title,String content){new AlertDialog.Builder(this).setTitle(title).setMessage(content).setPositiveButton("Entendido",null).show();}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==10 && result==RESULT_OK && data!=null){pendingUri=data.getData();consumePending();}}
-    @Override public void onBackPressed(){if(reading)buildHome();else super.onBackPressed();}
+    @Override public void onBackPressed(){if(sheetOverlay!=null)closeSheet();else if(reading)buildHome();else super.onBackPressed();}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);if(reading && reader!=null)state.putString("readingId",reader.currentId());}
     private void disposeWeb(){if(web!=null){web.removeJavascriptInterface("AndroidReader");web.destroy();web=null;}}
     @Override protected void onDestroy(){if(reader!=null)reader.listener=null;if(bound)unbindService(connection);disposeWeb();images.shutdownNow();super.onDestroy();}

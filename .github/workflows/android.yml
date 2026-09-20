@@ -7,6 +7,43 @@ on:
 permissions:
   contents: read
 jobs:
+  reader-panels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Permitir aceleración del emulador de pruebas
+        run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb shell wm size 1080x1920
+            adb shell wm density 420
+            gradle connectedDebugAndroidTest --no-daemon
+            adb exec-out run-as sv.vlad.lector cat files/panel-aa.png > panel-aa.png
+            adb exec-out run-as sv.vlad.lector cat files/panel-voces.png > panel-voces.png
+            adb exec-out run-as sv.vlad.lector cat files/panel-indice.png > panel-indice.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paneles-android
+          path: |
+            panel-*.png
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
   pagination:
     runs-on: ubuntu-latest
     timeout-minutes: 10
