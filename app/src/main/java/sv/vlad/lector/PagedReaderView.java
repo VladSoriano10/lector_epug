@@ -16,6 +16,8 @@ public final class PagedReaderView extends WebView {
         void boundary(int delta);
         void toggle();
         void manual();
+        void playVisible(int chapter, String loc, int offset, int chunk);
+        void boundarySpeech();
     }
     private final Listener listener;
     private volatile File epub;
@@ -63,6 +65,11 @@ public final class PagedReaderView extends WebView {
     private static WebResourceResponse blocked() {
         return new WebResourceResponse("text/plain","UTF-8",404,"Not found",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));
     }
+    @Override protected void onScrollChanged(int left,int top,int oldLeft,int oldTop) {
+        super.onScrollChanged(left,top,oldLeft,oldTop);
+        // Pages move inside the document; native focus/selection must not pan the whole WebView.
+        if(left!=0 || top!=0)super.scrollTo(0,0);
+    }
     public void chapter(File file,EpubReader.Chapter content,int index,boolean dark,int font,String loc,int offset) {
         epub=file;chapter=index;epoch++;
         pending="Reader.load("+JSONObject.quote(content.html)+","+dark+","+font+","+JSONObject.quote(loc)+","+offset+","+epoch+")";
@@ -74,6 +81,7 @@ public final class PagedReaderView extends WebView {
     public void speak(int chunk,int offset) { evaluateJavascript("Reader.speak("+chunk+","+offset+")",null); }
     public void appearance(boolean dark,int font) { evaluateJavascript("Reader.appearance("+dark+","+font+")",null); }
     public void clearSpeech() { evaluateJavascript("Reader.clearSpeech()",null); }
+    public void startSpeech() { evaluateJavascript("Reader.startSpeech()",null); }
     private final class Bridge {
         private void dispatch(int token,Runnable task) { post(()->{if(token==epoch)task.run();}); }
         @JavascriptInterface public void position(int token,int page,int pages,String loc,int offset,int chunk) {
@@ -82,5 +90,9 @@ public final class PagedReaderView extends WebView {
         @JavascriptInterface public void boundary(int token,int delta) { dispatch(token,()->listener.boundary(delta)); }
         @JavascriptInterface public void toggle(int token) { dispatch(token,listener::toggle); }
         @JavascriptInterface public void manual(int token) { dispatch(token,listener::manual); }
+        @JavascriptInterface public void playVisible(int token,String loc,int offset,int chunk) {
+            dispatch(token,()->listener.playVisible(chapter,loc,offset,chunk));
+        }
+        @JavascriptInterface public void boundarySpeech(int token) { dispatch(token,listener::boundarySpeech); }
     }
 }

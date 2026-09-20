@@ -1,6 +1,12 @@
-# Lector EPUB · Android
+# VladER · Android
 
-Versión 0.2: biblioteca y lector paginado con ilustraciones, para leer o escuchar EPUB con un motor TTS instalado. Android 8 o superior; dispositivo de prueba: Redmi Note 11 con Android 13. El usuario confirmó que la voz de la versión 0.1 funciona en su teléfono.
+Versión 0.3.2: nombre visible **VladER**, páginas posicionadas mediante transformación (sin scroll horizontal nativo) y canal de APK con firma permanente. Conserva voz desde el texto visible, icono, portadas y giro de página. Android 8 o superior; dispositivo de prueba: Redmi Note 11 con Android 13. La corrección del recorte debe comprobarse también en ese dispositivo.
+
+**Para actualizar sin desinstalar:** completa una vez [la configuración de firma privada](docs/FIRMA.md). Luego usa **VladER - APK con firma permanente**, no el APK debug de pruebas. La clave no se incluye en el repositorio; la firma queda pendiente hasta guardar los secretos y ejecutar ese workflow. El cambio desde la antigua firma debug puede requerir una última reinstalación, con pérdida de datos locales.
+
+El botón **Escuchar** consulta la página actual al iniciar por primera vez y lee desde su primer carácter visible. Después de **Pausar**, reanuda desde la última posición de voz de la sesión; cambiar tema, letra u orientación no la sustituye por el inicio de página. Navegar manualmente (página, deslizador, índice u otro libro) cancela esa reanudación para escuchar desde la nueva posición. Si la página solo contiene imágenes, busca el texto siguiente. La pantalla sigue los rangos de palabras si el motor TTS proporciona `onRangeStart`; en motores sin ese evento puede repetir el fragmento pausado. No se usan supuestos números de página del EPUB: se calcula sobre la maquetación actual del teléfono.
+
+Las portadas se buscan mediante EPUB 3, metadatos EPUB 2, guía de portada, nombres habituales y primera sección. Se resuelven envoltorios HTML/SVG hacia imágenes locales; los libros ya importados se revisan una vez al actualizar. Las portadas puramente vectoriales (sin imagen raster) todavía no tienen miniatura. La transición manual dentro de una sección dura 180 ms y respeta la preferencia de movimiento reducido del WebView; los saltos de capítulo, índice y voz son inmediatos.
 
 ## Obtener el APK sin Android Studio
 

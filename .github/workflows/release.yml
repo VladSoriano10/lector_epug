@@ -1,0 +1,49 @@
+name: VladER - APK con firma permanente
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+          cache-disabled: true
+      - name: Restaurar clave privada y compilar
+        env:
+          VLADER_KEYSTORE_BASE64: ${{ secrets.VLADER_KEYSTORE_BASE64 }}
+          VLADER_STORE_PASSWORD: ${{ secrets.VLADER_STORE_PASSWORD }}
+          VLADER_KEY_ALIAS: ${{ secrets.VLADER_KEY_ALIAS }}
+          VLADER_KEY_PASSWORD: ${{ secrets.VLADER_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$VLADER_KEYSTORE_BASE64" || -z "$VLADER_STORE_PASSWORD" || -z "$VLADER_KEY_ALIAS" || -z "$VLADER_KEY_PASSWORD" ]]; then
+            echo 'Faltan secretos de firma. Sigue docs/FIRMA.md. No se generará una clave provisional.'
+            exit 1
+          fi
+          export VLADER_KEYSTORE_PATH="$RUNNER_TEMP/vlader-release.p12"
+          umask 077
+          trap 'rm -f -- "$VLADER_KEYSTORE_PATH"' EXIT
+          printf '%s' "$VLADER_KEYSTORE_BASE64" | base64 --decode > "$VLADER_KEYSTORE_PATH"
+          unset VLADER_KEYSTORE_BASE64
+          gradle testReleaseUnitTest lintRelease assembleRelease --no-daemon
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/VladER.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VladER-firma-permanente
+          path: app/build/outputs/apk/release/VladER.apk
+          if-no-files-found: error
+          retention-days: 30

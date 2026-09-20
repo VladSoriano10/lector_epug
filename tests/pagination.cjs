@@ -5,7 +5,7 @@ const {chromium} = require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES ? proc
 const assets = path.join(__dirname, '../app/src/main/assets');
 (async () => {
   const browser = await chromium.launch({headless:true});
-  const page = await browser.newPage({viewport:{width:393,height:851}});
+  const page = await browser.newPage({viewport:{width:393,height:851},deviceScaleFactor:2.75,isMobile:true,hasTouch:true});
   const reports = [];
   await page.exposeFunction('reportPosition', (...args) => reports.push(args));
   await page.addInitScript(() => {
@@ -24,6 +24,28 @@ const assets = path.join(__dirname, '../app/src/main/assets');
   await page.waitForFunction(()=>Reader.snapshot().count>5);
   let first=await page.evaluate(()=>Reader.snapshot());
   assert.equal(first.page,0);assert(first.count>5);
+  const transition=await page.evaluate(()=>{
+    Reader.turn(1);
+    const sheet=document.querySelector('.turn-sheet');
+    return {active:!!sheet,ids:sheet.querySelectorAll('[id]').length,
+      width:sheet.clientWidth,originalWidth:document.getElementById('viewport').clientWidth,
+      font:getComputedStyle(sheet.firstChild).fontSize,originalFont:getComputedStyle(document.getElementById('book')).fontSize};
+  });
+  assert(transition.active,'manual turn creates a visible sheet');
+  assert.equal(transition.ids,0,'overlay does not duplicate reader IDs');
+  assert.equal(transition.width,transition.originalWidth);
+  assert.equal(transition.font,transition.originalFont);
+  assert.equal((await page.evaluate(()=>Reader.snapshot())).page,1);
+  await page.waitForTimeout(230);
+  assert.equal(await page.locator('.turn-sheet').count(),0,'turn overlay is removed');
+  await page.evaluate(()=>{Reader.turn(1);Reader.turn(-1);});
+  assert.equal((await page.evaluate(()=>Reader.snapshot())).page,1,'rapid reverse preserves destination');
+  await page.waitForTimeout(230);
+  assert.equal(await page.locator('.turn-sheet').count(),0);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.evaluate(()=>Reader.turn(1));
+  assert.equal(await page.locator('.turn-sheet').count(),0,'reduced motion skips animation');
+  await page.emulateMedia({reducedMotion:'no-preference'});
   await page.evaluate(()=>Reader.page(5));
   const saved=await page.evaluate(()=>Reader.snapshot());assert.equal(saved.page,5);
   assert(saved.position.loc.startsWith('loc:'));
@@ -47,6 +69,64 @@ const assets = path.join(__dirname, '../app/src/main/assets');
   const out=process.env.PAGING_SCREENSHOT;
   if(out)await page.screenshot({path:out});
   assert(reports.length>5,'page changes report persistent locations');
+  // Independent oracle: inspect actual character rectangles, not Reader's page arithmetic.
+  await page.evaluate(()=>{
+    window.AndroidReader.playVisible=(epoch,loc,offset,chunk)=>{window.speechRequest={epoch,loc,offset,chunk};};
+    window.firstPaintedCharacter=()=>{
+      const bounds=document.getElementById('viewport').getBoundingClientRect();
+      for(const el of document.querySelectorAll('#book [data-chunk]')) {
+        const node=el.firstChild, range=document.createRange();
+        for(let i=0;i<node.length;i++) {
+          if(!node.data[i].trim())continue;
+          range.setStart(node,i);range.setEnd(node,i+1);
+          if([...range.getClientRects()].some(r=>r.width>0 && r.right>bounds.left && r.left<bounds.right && r.bottom>bounds.top && r.top<bounds.bottom))
+            return {loc:'loc:'+el.dataset.loc,offset:i,chunk:Number(el.dataset.chunk)};
+        }
+      }
+      return null;
+    };
+  });
+  for(const font of [16,20,34]) {
+    await page.evaluate(font=>Reader.appearance(true,font),font);
+    const total=(await page.evaluate(()=>Reader.snapshot())).count;
+    for(let n=0;n<total;n++) {
+      const result=await page.evaluate(n=>{
+        Reader.page(n);
+        const expected=firstPaintedCharacter();
+        window.speechRequest=null;Reader.startSpeech();
+        const request=window.speechRequest;
+        const v=document.getElementById('viewport');
+        // A clipped (non-scrollable) viewport must reject native scrolling attempts.
+        v.scrollLeft=37;
+        const drift=Math.abs(v.scrollLeft);
+        const bounds=v.getBoundingClientRect();
+        const visibleRects=[...document.querySelectorAll('#book [data-chunk]')].flatMap(el=>[...el.getClientRects()])
+          .filter(r=>r.right>bounds.left && r.left<bounds.right && r.bottom>bounds.top && r.top<bounds.bottom);
+        const leftMargin=visibleRects.length?Math.min(...visibleRects.map(r=>r.left-bounds.left)):8;
+        if(expected && request)Reader.speak(request.chunk,request.offset);
+        return {expected,request,drift,leftMargin,after:Reader.snapshot().page};
+      },n);
+      assert(result.drift<=1,`page ${n} must not drift or clip its left edge: ${result.drift}`);
+      assert(result.leftMargin>=7,`page ${n}, font ${font}: content enters left clipping edge (${result.leftMargin}px)`);
+      if(result.expected) {
+        assert(result.request,`missing speech target on page ${n}`);
+        const {epoch,...actual}=result.request;
+        assert.deepEqual(actual,result.expected,`speech starts at first visible character, page ${n}, font ${font}`);
+        assert.equal(result.after,n,'starting speech must not jump to another page');
+      }
+    }
+  }
+  // A long italic paragraph crosses columns, keeping a gutter around the glyphs.
+  await page.evaluate(async()=>Reader.load('<p><em><span id="c0" data-chunk="0" data-loc="0">'+('fijación Ágil y lectura en español. ').repeat(180)+'</span></em></p>',true,24,'',0,2));
+  await page.waitForFunction(()=>Reader.snapshot().ready && Reader.snapshot().epoch===2 && Reader.snapshot().count>2);
+  await page.evaluate(()=>Reader.page(1));
+  assert.equal((await page.evaluate(()=>Reader.snapshot())).page,1,'italic test measures the second page, not a pending load');
+  const inset=await page.evaluate(()=>{
+    const bounds=document.getElementById('viewport').getBoundingClientRect();
+    return Math.min(...[...document.getElementById('c0').getClientRects()].filter(r=>r.left>=bounds.left && r.left<bounds.right).map(r=>r.left-bounds.left));
+  });
+  assert(inset>=5,'italic text has an inner left gutter');
+  if(out)await page.screenshot({path:out});
   console.log('Pagination checks passed: page turns, content restoration, font size, theme, illustration sizing, rotation and speech target.');
   await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

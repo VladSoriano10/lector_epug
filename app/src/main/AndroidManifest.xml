@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>
-    <application android:label="Lector EPUB" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false" android:supportsRtl="true">
+    <application android:label="VladER" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:configChanges="orientation|screenSize|uiMode">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <intent-filter>

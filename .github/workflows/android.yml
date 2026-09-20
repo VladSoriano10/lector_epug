@@ -47,6 +47,23 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Probar firma release con clave desechable (no distribuir)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gradle assembleRelease --no-daemon > "$RUNNER_TEMP/signing-guard.log" 2>&1; then
+            echo 'ERROR: release no debe compilar sin firma configurada'
+            exit 1
+          fi
+          grep -q 'Falta la firma permanente' "$RUNNER_TEMP/signing-guard.log"
+          export VLADER_KEYSTORE_PATH="$RUNNER_TEMP/vlader-signing-test.p12"
+          export VLADER_STORE_PASSWORD='temporary-ci-test-only'
+          export VLADER_KEY_PASSWORD="$VLADER_STORE_PASSWORD"
+          export VLADER_KEY_ALIAS='ci-test-only'
+          trap 'rm -f -- "$VLADER_KEYSTORE_PATH" app/build/outputs/apk/release/app-release.apk' EXIT
+          keytool -genkeypair -keystore "$VLADER_KEYSTORE_PATH" -storetype PKCS12 -alias "$VLADER_KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 1 -dname 'CN=Disposable CI Test' -storepass:env VLADER_STORE_PASSWORD -keypass:env VLADER_KEY_PASSWORD
+          gradle testReleaseUnitTest lintRelease assembleRelease --no-daemon
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify app/build/outputs/apk/release/app-release.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
