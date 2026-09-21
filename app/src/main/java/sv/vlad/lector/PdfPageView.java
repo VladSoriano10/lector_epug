@@ -14,7 +14,7 @@ public final class PdfPageView extends View {
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
     private final ScaleGestureDetector scaleDetector;private final GestureDetector gestures;
-    private Bitmap bitmap;private File file;private int page,token;private boolean closed,modal,dark;
+    private Bitmap bitmap;private File file;private int page;private volatile int token;private volatile boolean closed;private boolean modal,dark;
     private long blockedUntil;private float zoom=1,panX,panY;private String error="Cargando página…";
     public PdfPageView(Context context,Listener listener){
         super(context);setContentDescription("Página PDF. Pellizca para ampliar; desliza para cambiar de página.");

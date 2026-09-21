@@ -84,7 +84,7 @@ public final class PdfBookReader {
             blocks.add(new Block(top,left,null));
         }
         @Override public void appendRectangle(PointF a,PointF b,PointF c,PointF d){point=a;}
-        @Override public void clip(int windingRule){}
+        @Override public void clip(android.graphics.Path.FillType windingRule){}
         @Override public void moveTo(float x,float y){point=new PointF(x,y);}
         @Override public void lineTo(float x,float y){point=new PointF(x,y);}
         @Override public void curveTo(float x1,float y1,float x2,float y2,float x3,float y3){point=new PointF(x3,y3);}
@@ -92,8 +92,8 @@ public final class PdfBookReader {
         @Override public void closePath(){}
         @Override public void endPath(){}
         @Override public void strokePath(){}
-        @Override public void fillPath(int windingRule){}
-        @Override public void fillAndStrokePath(int windingRule){}
+        @Override public void fillPath(android.graphics.Path.FillType windingRule){}
+        @Override public void fillAndStrokePath(android.graphics.Path.FillType windingRule){}
         @Override public void shadingFill(com.tom_roush.pdfbox.cos.COSName name){}
     }
 }
