@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.*;
 import android.view.*;
 import android.widget.*;
+import android.provider.MediaStore;
 import androidx.test.core.app.*;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -55,6 +56,10 @@ public class PdfReaderTest {
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(intent)){
             boolean[] loaded={false};long deadline=SystemClock.uptimeMillis()+20000;
             while(!loaded[0] && SystemClock.uptimeMillis()<deadline){scenario.onActivity(a->{ReaderService r=service(a);loaded[0]=r!=null && !r.busy && r.book!=null && r.book.pdf;});SystemClock.sleep(100);}assertTrue("PDF imported",loaded[0]);
+            boolean[] painted={false};while(!painted[0] && SystemClock.uptimeMillis()<deadline){scenario.onActivity(a->{try{Field f=MainActivity.class.getDeclaredField("pdf");f.setAccessible(true);PdfPageView view=(PdfPageView)f.get(a);if(view!=null){Field b=PdfPageView.class.getDeclaredField("bitmap");b.setAccessible(true);painted[0]=b.get(view)!=null;}}catch(Exception e){throw new AssertionError(e);}});SystemClock.sleep(100);}assertTrue("PDF displayed",painted[0]);
+            ContentValues capture=new ContentValues();capture.put(MediaStore.Downloads.DISPLAY_NAME,"pdf-reader.png");capture.put(MediaStore.Downloads.MIME_TYPE,"image/png");capture.put(MediaStore.Downloads.RELATIVE_PATH,"Download/VladERTests");
+            Uri shot=context.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,capture);assertNotNull(shot);
+            Bitmap bitmap=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(bitmap);try(OutputStream out=context.getContentResolver().openOutputStream(shot)){assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,out));}bitmap.recycle();
             scenario.onActivity(a->{ReaderService r=service(a);r.goChapter(1);savedId[0]=r.currentId();assertTrue(savedId[0].endsWith(".pdf"));a.toggle();});
             for(String label:new String[]{"Aa","Voces","Índice"}){
                 scenario.onActivity(a->{View button=find(a.getWindow().getDecorView(),label);assertNotNull(button);button.performClick();});

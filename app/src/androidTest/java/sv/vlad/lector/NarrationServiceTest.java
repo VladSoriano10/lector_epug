@@ -41,6 +41,7 @@ public class NarrationServiceTest {
                 EpubReader.Chapter last=new EpubReader.Chapter("Final","","<span data-loc='0' data-chunk='0'>Final</span>",Collections.singletonList("Final"));
                 service.book=new EpubReader.Book("Test","","",Arrays.asList(first,imageOnly,last),Collections.emptyList());service.chapter=0;service.chunk=0;service.locator="";service.speechOffset=0;
                 service.illustrationSettings(true,3);field("narrationIndex").setInt(service,-1);service.playing=true;speak(service);assertEquals("Antes",fake.text);
+                service.speechOffset=2;service.pause();service.playing=true;speak(service);assertEquals("tes",fake.text);
                 service.utteranceDone(fake.id);assertEquals("Ilustración",fake.text);assertTrue(service.speakingIllustration());
                 service.utteranceDone(fake.id);assertEquals(3000,fake.silence);String canceled=fake.id;
                 service.pause();service.utteranceDone(canceled);assertTrue(service.canResumeSpeech());assertEquals(0,service.chapter);
