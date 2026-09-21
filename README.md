@@ -1,31 +1,35 @@
 # VladER · Android
 
-Versión 0.3.3: contenedor de texto con ancho entero compartido por la columna y el avance, para evitar deriva en pantallas con medidas fraccionarias. Índice, voces, velocidad y Aa usan paneles propios dentro de la misma ventana, sin redimensionar el lector al abrir/cerrar y con bloqueo de gestos residuales. Conserva voz, pausa/reanudación, ilustraciones y firma permanente. Android 8 o superior; falta confirmar el resultado en el Redmi Note 11 con los EPUB concretos del usuario.
+Versión 0.4.0: biblioteca EPUB y PDF, visor PDF independiente con zoom y voz desde la página actual. La narración anuncia «Ilustración», espera 3 segundos por defecto y continúa; se configura en **Voces → Ilustraciones** o **Aa → Ilustraciones** (0–30 segundos, aviso desactivable). Conserva los identificadores y marcadores EPUB, sus márgenes, paneles y firma permanente. Android 8 o superior.
+
+Los PDF mantienen sus páginas y colores originales; el tema oscuro cambia los controles. La voz necesita texto extraíble: no incluye OCR. Detecta imágenes raster significativas en el orden vertical de la página; dibujos vectoriales, fondos y composiciones con varias columnas pueden requerir revisión. El índice PDF ofrece páginas, no capítulos inferidos. Los archivos protegidos con contraseña no se importan. Límite: 100 MB y 1500 páginas por PDF.
+
+Respaldo estable anterior: [`rollback/v0.3.3-epub-estable`](https://github.com/VladSoriano10/lector_epug/tree/rollback/v0.3.3-epub-estable). Consulta [ROLLBACK.md](docs/ROLLBACK.md) para volver sin perder la firma.
 
 **Para actualizar sin desinstalar:** completa una vez [la configuración de firma privada](docs/FIRMA.md). Luego usa **VladER - APK con firma permanente**, no el APK debug de pruebas. La clave no se incluye en el repositorio; la firma queda pendiente hasta guardar los secretos y ejecutar ese workflow. El cambio desde la antigua firma debug puede requerir una última reinstalación, con pérdida de datos locales.
 
-El botón **Escuchar** consulta la página actual al iniciar por primera vez y lee desde su primer carácter visible. Después de **Pausar**, reanuda desde la última posición de voz de la sesión; cambiar tema, letra u orientación no la sustituye por el inicio de página. Navegar manualmente (página, deslizador, índice u otro libro) cancela esa reanudación para escuchar desde la nueva posición. Si la página solo contiene imágenes, busca el texto siguiente. La pantalla sigue los rangos de palabras si el motor TTS proporciona `onRangeStart`; en motores sin ese evento puede repetir el fragmento pausado. No se usan supuestos números de página del EPUB: se calcula sobre la maquetación actual del teléfono.
+En EPUB, **Escuchar** consulta la página actual y comienza por su primer texto o ilustración visible. En PDF comienza por la página original mostrada. Después de **Pausar**, reanuda desde la última posición de voz de la sesión; cambiar tema, letra u orientación no la sustituye por el inicio de página. Navegar manualmente cancela esa reanudación. Las ilustraciones se anuncian antes de la espera configurada y del texto siguiente. La pausa durante la espera conserva los milisegundos pendientes; una pausa durante el aviso puede repetir «Ilustración». La pantalla EPUB sigue los rangos de palabras si el motor TTS proporciona `onRangeStart`; en motores sin ese evento puede repetir el fragmento pausado.
 
 Las portadas se buscan mediante EPUB 3, metadatos EPUB 2, guía de portada, nombres habituales y primera sección. Se resuelven envoltorios HTML/SVG hacia imágenes locales; los libros ya importados se revisan una vez al actualizar. Las portadas puramente vectoriales (sin imagen raster) todavía no tienen miniatura. La transición manual dentro de una sección dura 180 ms y respeta la preferencia de movimiento reducido del WebView; los saltos de capítulo, índice y voz son inmediatos.
 
 ## Obtener el APK sin Android Studio
 
-1. Abre **Actions → Compilar APK** en este repositorio.
-2. Entra en una ejecución terminada con marca verde.
-3. En **Artifacts**, descarga **lector-epub-apk** (inicia sesión en GitHub).
-4. Extrae el ZIP e instala `app-debug.apk` en el teléfono. Autoriza la instalación desde el navegador o gestor de archivos cuando Android lo solicite.
+1. Abre **Actions → VladER - APK con firma permanente → Run workflow → main**.
+2. Espera a que termine con marca verde y abre esa ejecución.
+3. En **Artifacts**, descarga **VladER-firma-permanente** (inicia sesión en GitHub).
+4. Extrae el ZIP e instala `VladER.apk` sobre la versión firmada anterior. Se mantienen biblioteca y progreso si se usa la misma clave.
 
-El APK es de prueba y no se publica en Google Play. Las compilaciones de prueba usan la clave debug del ejecutor: entre ejecuciones puede cambiar. Si Android rechaza una actualización por firma distinta, hará falta desinstalar la versión anterior, lo que elimina su biblioteca y progreso. Conserva tus EPUB originales. Para uso continuado, falta configurar una clave de firma estable privada.
+El workflow **Compilar APK** también genera un APK debug para pruebas; tiene una firma distinta. Para las actualizaciones de uso personal utiliza siempre **VladER - APK con firma permanente** con los mismos secretos. No se publica en Google Play.
 
 ## Uso
 
-- **Importar**: selecciona un EPUB sin DRM. Se copia a los datos privados de la app; no necesitas conceder acceso a todo el almacenamiento.
+- **Importar**: selecciona un EPUB sin DRM o un PDF sin contraseña. Se copia a los datos privados de la app; no necesitas conceder acceso a todo el almacenamiento.
 - **Biblioteca inicial**: tarjetas con portada cuando está declarada en el EPUB, título, autor y progreso aproximado por secciones. Abre un libro para entrar en la vista de lectura. Importar el mismo archivo no crea duplicados.
-- **Abrir con / Compartir**: registrado para EPUB y tipos ZIP/binario genéricos que usan algunos gestores y mensajerías. Acepta `ACTION_VIEW` y `ACTION_SEND`, copia el archivo mientras conserva el permiso temporal y lo añade a la biblioteca. La disponibilidad de la opción depende del tipo MIME y de los permisos que entregue WhatsApp o la app de origen. Un ZIP genérico se valida como EPUB antes de guardarse.
+- **Abrir con / Compartir**: registrado para EPUB, PDF y tipos ZIP/binario genéricos que usan algunos gestores y mensajerías. Acepta `ACTION_VIEW` y `ACTION_SEND`, copia el archivo mientras conserva el permiso temporal y lo añade a la biblioteca. La disponibilidad depende del tipo MIME y de los permisos que entregue la app de origen. El contenido se valida antes de guardarlo.
 - **Lectura a pantalla completa**: desliza horizontalmente para pasar página; toca para mostrar u ocultar controles superpuestos. También hay botones y deslizador de páginas por sección. El menú no reduce el espacio de paginación.
 - **Posición**: guarda sección, elemento y desplazamiento dentro del texto. Cambiar tamaño de letra u orientación recalcula las páginas conservando el contenido de referencia. Las páginas mostradas son de la sección actual: su número cambia con el tamaño de pantalla y fuente.
 - **Índice**: utiliza navegación EPUB 3 o NCX EPUB 2, incluidos enlaces a apartados dentro de una misma sección. Si falta el índice, utiliza el orden `spine`.
-- **Imágenes interiores**: muestra imágenes locales JPG, PNG, GIF, WebP, SVG como recurso y envoltorios SVG con una imagen raster. Las láminas sin texto se conservan visualmente y la voz pasa a la siguiente sección con texto. No aplica OCR a imágenes.
+- **Imágenes interiores**: en EPUB muestra imágenes locales JPG, PNG, GIF, WebP, SVG como recurso y envoltorios SVG con una imagen raster. Las láminas sin texto también entran en la secuencia de narración con aviso y espera. No aplica OCR.
 - **Modo oscuro y letra**: tema persistente en biblioteca y lectura; tamaño entre 16 y 34. Desde el lector toca **Aa**. En la biblioteca usa el botón de luna.
 - **Escuchar / Pausar**: mantiene motor, voz, velocidad y reproducción de fondo. Al pasar de página manualmente se pausa y se prepara la lectura desde el primer texto visible. Reanudar tras una pausa de voz puede repetir el fragmento actual, no garantiza la palabra exacta.
 - **Voces**: selecciona un motor instalado y después una voz local en español. Los idiomas distintos de español y las voces que declaran necesitar red no aparecen. Las variantes distintas de España se muestran primero.
@@ -42,11 +46,11 @@ Los libros y el progreso se guardan localmente. El lector no solicita permiso de
 
 ## Límites
 
-- EPUB sin DRM; no PDF ni OCR. Reorganiza el contenido para adaptarlo a la pantalla; no reproduce la maquetación fija original.
+- EPUB sin DRM y PDF sin contraseña, sin OCR. EPUB adapta el texto a la pantalla; PDF conserva la página original con zoom. El orden de voz en PDF con columnas o elementos superpuestos puede no coincidir perfectamente con el orden visual.
 - Conserva texto, ilustraciones y formato básico. Elimina scripts, formularios, estilos del editor y recursos remotos. Las tablas extensas y SVG vectoriales incrustados complejos pueden requerir ajustes; las ilustraciones superiores a 4 MB no se cargan.
 - Límite de archivo importado: 100 MB; capítulo: 4 MB; contenido HTML acumulado: 16 MB.
 - Lectura según el `spine` del EPUB, no según el orden de los archivos ZIP. Omite contenido marcado como no lineal y recursos que no son HTML.
-- Pendientes: modelos de voz integrados/importables, selección de voz abierta LATAM verificada, firma estable, eliminación de libros y temporizador.
+- Pendientes: modelos de voz integrados/importables, selección de voz abierta LATAM verificada, eliminación de libros y temporizador.
 
 ## Compilar y verificar
 

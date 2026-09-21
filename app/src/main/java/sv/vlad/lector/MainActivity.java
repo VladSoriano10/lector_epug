@@ -29,6 +29,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     private Button play;
     private SeekBar pageSlider;
     private PagedReaderView web;
+    private PdfPageView pdf;
     private FrameLayout sheetOverlay;
     private final ExecutorService images=Executors.newSingleThreadExecutor();
     private int libraryGeneration;
@@ -86,7 +87,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         ScrollView scroll=new ScrollView(this);home.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         bookList=column();bookList.setPadding(dp(12),0,dp(12),dp(12));scroll.addView(bookList);
         LinearLayout actions=new LinearLayout(this);actions.setPadding(dp(12),dp(4),dp(12),dp(8));home.addView(actions);
-        rowButton(actions,"Importar EPUB",this::pickFile);rowButton(actions,"Voces",this::voiceMenu);
+        rowButton(actions,"Importar EPUB / PDF",this::pickFile);rowButton(actions,"Voces",this::voiceMenu);
         refreshLibrary();
     }
     private void refreshLibrary() {
@@ -94,7 +95,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         int token=++libraryGeneration;bookList.removeAllViews();
         Map<String,String> books=reader==null?new HashMap<>():reader.library();
         if(books.isEmpty()) {
-            TextView empty=text("Tu próxima lectura empieza aquí\n\nImporta un EPUB o ábrelo desde WhatsApp o tu gestor de archivos. Quedará guardado en esta biblioteca.",20,foreground());
+            TextView empty=text("Tu próxima lectura empieza aquí\n\nImporta un EPUB o PDF o ábrelo desde WhatsApp o tu gestor de archivos. Quedará guardado en esta biblioteca.",20,foreground());
             empty.setPadding(dp(24),dp(52),dp(24),dp(24));empty.setLineSpacing(dp(6),1.1f);bookList.addView(empty);return;
         }
         List<String> ids=new ArrayList<>(books.keySet());ids.sort((a,b)->Long.compare(prefs.getLong(b+":opened",0),prefs.getLong(a+":opened",0)));
@@ -103,11 +104,15 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
             GradientDrawable shape=new GradientDrawable();shape.setColor(Color.parseColor(dark?"#1A333B":"#FFFFFF"));shape.setCornerRadius(dp(12));
             card.setBackground(shape);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=dp(12);bookList.addView(card,cp);
             FrameLayout cover=new FrameLayout(this);card.addView(cover,new LinearLayout.LayoutParams(dp(88),dp(132)));
-            TextView placeholder=text("EPUB\n\n"+books.get(id).substring(0,Math.min(1,books.get(id).length())),22,Color.WHITE);
+            TextView placeholder=text((id.endsWith(".pdf")?"PDF":"EPUB")+"\n\n"+books.get(id).substring(0,Math.min(1,books.get(id).length())),22,Color.WHITE);
             placeholder.setGravity(Gravity.CENTER);placeholder.setBackgroundColor(teal());cover.addView(placeholder,new FrameLayout.LayoutParams(-1,-1));
             ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);cover.addView(image,new FrameLayout.LayoutParams(-1,-1));
             images.execute(()->{
                 try {
+                    if(id.endsWith(".pdf")){
+                        Bitmap bitmap=PdfPageView.render(new File(getFilesDir(),id),0,300);
+                        runOnUiThread(()->{if(!isDestroyed() && token==libraryGeneration)image.setImageBitmap(bitmap);else bitmap.recycle();});return;
+                    }
                     String coverPath=prefs.getString("cover:"+id,"");
                     if(prefs.getInt("coverVersion:"+id,0)<3) {
                         coverPath=EpubReader.findCover(new File(getFilesDir(),id));
@@ -127,7 +132,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
             int section=prefs.getInt(id+":chapter",0),sections=prefs.getInt(id+":chapters",1),localPage=prefs.getInt(id+":page",0),total=prefs.getInt(id+":pages",1);
             ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(1000);
             progress.setProgress((int)(1000.0*(section+(double)localPage/Math.max(1,total))/Math.max(1,sections)));details.addView(progress,new LinearLayout.LayoutParams(-1,dp(6)));
-            TextView location=text(prefs.contains(id+":chapter")?"Sección "+(section+1)+" · Continuar leyendo":"Sin empezar · Abrir libro",13,muted());location.setPadding(0,dp(12),0,0);details.addView(location);
+            TextView location=text(prefs.contains(id+":chapter")?(id.endsWith(".pdf")?"Página ":"Sección ")+(section+1)+" · Continuar leyendo":"Sin empezar · Abrir libro",13,muted());location.setPadding(0,dp(12),0,0);details.addView(location);
             card.setOnClickListener(v->openBook(id));card.setContentDescription("Abrir "+books.get(id));
         }
     }
@@ -145,7 +150,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
             if(pendingUri==null && intent.getClipData()!=null && intent.getClipData().getItemCount()>0)pendingUri=intent.getClipData().getItemAt(0).getUri();
         }else if("sv.vlad.lector.RESUME".equals(action))resumeIntent=true;
         if(pendingUri!=null && !"content".equals(pendingUri.getScheme()) && !"file".equals(pendingUri.getScheme())) {
-            pendingUri=null;message("Archivo no compatible","Selecciona un archivo EPUB guardado en el teléfono.");
+            pendingUri=null;message("Archivo no compatible","Selecciona un archivo EPUB o PDF guardado en el teléfono.");
         }
         if(reader!=null)consumePending();
     }
@@ -170,7 +175,8 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         closeSheet();
         reading=true;libraryGeneration++;disposeWeb();fullscreen(true);shownId="";shownChapter=-1;lastSpoken=-1;
         root=new FrameLayout(this);root.setBackgroundColor(background());setContentView(root);
-        web=new PagedReaderView(this,this);root.addView(web,new FrameLayout.LayoutParams(-1,-1));
+        if(reader.book.pdf){pdf=new PdfPageView(this,new PdfPageView.Listener(){public void turn(int delta){turnPage(delta);}public void toggle(){MainActivity.this.toggle();}});root.addView(pdf,new FrameLayout.LayoutParams(-1,-1));}
+        else {web=new PagedReaderView(this,this);root.addView(web,new FrameLayout.LayoutParams(-1,-1));}
         top=column();top.setPadding(dp(12),dp(10),dp(12),dp(12));top.setBackgroundColor(teal());
         FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);root.addView(top,tp);
         LinearLayout tools=new LinearLayout(this);top.addView(tools);
@@ -180,15 +186,15 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         bottom=column();bottom.setBackgroundColor(teal());bottom.setPadding(dp(12),dp(8),dp(12),dp(12));
         root.addView(bottom,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
         LinearLayout playback=new LinearLayout(this);bottom.addView(playback);
-        rowButton(playback,"◀ Página",()->web.turn(-1));
-        play=button("Escuchar",()->{if(reader.playing)reader.pause();else if(reader.canResumeSpeech())reader.play();else web.startSpeech();});playback.addView(play,new LinearLayout.LayoutParams(0,dp(48),1));
-        rowButton(playback,"Página ▶",()->web.turn(1));
+        rowButton(playback,"◀ Página",()->turnPage(-1));
+        play=button("Escuchar",()->{if(reader.playing)reader.pause();else if(reader.canResumeSpeech())reader.play();else if(pdf!=null){reader.goChapter(reader.chapter);reader.play();}else web.startSpeech();});playback.addView(play,new LinearLayout.LayoutParams(0,dp(48),1));
+        rowButton(playback,"Página ▶",()->turnPage(1));
         pageLabel=text("",14,Color.WHITE);pageLabel.setGravity(Gravity.CENTER);bottom.addView(pageLabel);
         pageSlider=new SeekBar(this);bottom.addView(pageSlider,new LinearLayout.LayoutParams(-1,dp(40)));
         pageSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             public void onProgressChanged(SeekBar s,int value,boolean user){if(user)pageLabel.setText("Página "+(value+1)+" / "+pages);}
             public void onStartTrackingTouch(SeekBar s){reader.manualNavigation();}
-            public void onStopTrackingTouch(SeekBar s){web.page(s.getProgress());}
+            public void onStopTrackingTouch(SeekBar s){if(pdf!=null)reader.goChapter(s.getProgress());else web.page(s.getProgress());}
         });
         controls=false;showControls();render();
         if(!prefs.getBoolean("gestureHint",false)) {
@@ -201,8 +207,14 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         if(opening && !reader.busy && reader.status.startsWith("Error:")) {opening=false;message("No se pudo importar",reader.status);}
         if(!reader.busy && pendingUri!=null){consumePending();return;}
         if(!reading){if(homeStatus!=null)homeStatus.setText(reader.busy?reader.status:reader.playing?"Escuchando: "+reader.book.title:reader.status.startsWith("Error:")?reader.status:"");return;}
-        if(reader.book==null || web==null)return;
+        if(reader.book==null || (web==null && pdf==null))return;
         play.setText(reader.playing?"Pausar":"Escuchar");play.setEnabled(!reader.busy);
+        if(pdf!=null){
+            nextLocator=null;
+            if(!shownId.equals(reader.currentId()) || shownChapter!=reader.chapter){shownId=reader.currentId();shownChapter=reader.chapter;pdf.show(reader.currentFile(),reader.chapter,dark);}
+            pages=reader.book.chapters.size();page=reader.chapter;pageLabel.setText("Página "+(page+1)+" / "+pages);
+            pageSlider.setMax(pages-1);pageSlider.setProgress(page);subheading.setText(reader.book.chapters.get(page).title+" · "+reader.status);return;
+        }
         boolean chapterChanged=!shownId.equals(reader.currentId()) || shownChapter!=reader.chapter;
         if(chapterChanged){
             shownId=reader.currentId();shownChapter=reader.chapter;lastSpoken=-1;
@@ -211,7 +223,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
             heading.setText(reader.book.title);
         }else if(nextLocator!=null){web.locate(nextLocator,0);nextLocator=null;}
         subheading.setText(reader.book.chapters.get(reader.chapter).title+" · "+reader.status);
-        if(reader.playing){lastSpoken=reader.chunk;if(!chapterChanged)web.speak(reader.chunk,reader.speechOffset);}
+        if(reader.playing){lastSpoken=reader.chunk;if(!chapterChanged){if(reader.speakingIllustration())web.locate(reader.speechLocator,0);else web.speak(reader.chunk,reader.speechOffset);}}
         if(!reader.playing){lastSpoken=-1;web.clearSpeech();}
     }
     @Override public void position(int chapter,int p,int total,String loc,int offset,int chunk) {
@@ -227,6 +239,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         navigating=false;shownChapter=-1;render();
     }
     @Override public void manual(){if(reader!=null)reader.manualNavigation();}
+    private void turnPage(int delta){if(pdf!=null)boundary(delta);else if(web!=null)web.turn(delta);}
     @Override public void playVisible(int chapter,String loc,int offset,int chunk) {
         if(!reading || reader==null || reader.busy || reader.playing || reader.chapter!=chapter)return;
         reader.visualPosition(loc,offset,chunk,page,pages);
@@ -241,10 +254,12 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     private void showControls(){if(top!=null){top.setVisibility(controls?View.VISIBLE:View.GONE);bottom.setVisibility(controls?View.VISIBLE:View.GONE);}}
     private void toggleTheme(){dark=!dark;prefs.edit().putBoolean("dark",dark).apply();
         setTheme(dark?android.R.style.Theme_Material_NoActionBar:android.R.style.Theme_Material_Light_NoActionBar);
-        if(reading){web.appearance(dark,font);root.setBackgroundColor(background());}else buildHome();}
+        if(reading){if(pdf!=null)pdf.appearance(dark);else web.appearance(dark,font);root.setBackgroundColor(background());}else buildHome();}
     private void appearance(){
         LinearLayout panel=openSheet("Tu lectura", "Ajusta el texto y la voz a tu ritmo");
         Switch mode=new Switch(this);mode.setText("Modo oscuro");mode.setTextColor(foreground());mode.setChecked(dark);mode.setPadding(dp(8),dp(8),dp(8),dp(16));panel.addView(mode);
+        mode.setOnCheckedChangeListener((b,value)->{if(value!=dark){toggleTheme();appearance();}});
+        if(pdf!=null){panel.addView(text("El PDF conserva su diseño y colores originales. Pellizca o toca dos veces para ampliar la página.",16,muted()));sheetRow(panel,"Velocidad de voz",String.format(Locale.ROOT,"%.2f× · Ajustar ritmo",reader.rate()),false,this::speed);sheetRow(panel,"Ilustraciones","Aviso y tiempo de espera",false,this::illustrations);return;}
         TextView preview=text("Un libro, muchas formas de imaginar.",font,foreground());preview.setTypeface(Typeface.SERIF);preview.setPadding(dp(16),dp(20),dp(16),dp(20));preview.setBackground(rounded(dark?0xFF17373F:0xFFEDF4F2,16));panel.addView(preview);
         TextView size=text("Tamaño de letra: "+font,16,foreground());panel.addView(size);
         size.setPadding(dp(4),dp(20),0,dp(4));
@@ -256,6 +271,17 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
             public void onStopTrackingTouch(SeekBar s){prefs.edit().putInt("font",font).apply();if(web!=null)web.appearance(dark,font);}
         });
         sheetRow(panel,"Velocidad de voz",reader==null?"Configura tu narración":String.format(Locale.ROOT,"%.2f× · Ajustar ritmo",reader.rate()),false,this::speed);
+        sheetRow(panel,"Ilustraciones","Aviso y tiempo de espera",false,this::illustrations);
+    }
+    private void illustrations(){
+        if(reader==null)return;
+        LinearLayout panel=openSheet("Ilustraciones","Una pausa para mirar antes de continuar");
+        Switch enabled=new Switch(this);enabled.setText("Avisar: Ilustración");enabled.setTextColor(foreground());enabled.setChecked(reader.announceIllustrations());panel.addView(enabled);
+        TextView label=text("Espera después del aviso: "+reader.illustrationSeconds()+" segundos",16,foreground());label.setPadding(0,dp(24),0,dp(12));panel.addView(label);
+        SeekBar seconds=new SeekBar(this);seconds.setMax(30);seconds.setProgress(reader.illustrationSeconds());panel.addView(seconds,new LinearLayout.LayoutParams(-1,dp(48)));
+        panel.addView(text("De 0 a 30 segundos. Al desactivar el aviso, la voz continúa directamente con el texto. En PDF se detectan imágenes; algunos dibujos vectoriales pueden no reconocerse.",14,muted()));
+        enabled.setOnCheckedChangeListener((b,value)->reader.illustrationSettings(value,seconds.getProgress()));
+        seconds.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){}public void onProgressChanged(SeekBar s,int value,boolean user){label.setText("Espera después del aviso: "+value+" segundos");if(user)reader.illustrationSettings(enabled.isChecked(),value);}});
     }
     private void speed(){
         if(reader==null)return;
@@ -266,7 +292,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     private void chapters(){
         if(reader==null || reader.book==null || reader.busy)return;
         List<EpubReader.TocEntry> entries=reader.book.toc;
-        LinearLayout panel=openSheet("Índice",reader.book.title);
+        LinearLayout panel=openSheet(reader.book.pdf?"Páginas":"Índice",reader.book.title);
         for(int n=0;n<entries.size();n++) {
             EpubReader.TocEntry entry=entries.get(n);
             sheetRow(panel,entry.title,"Sección "+(entry.chapter+1),reader.chapter==entry.chapter,()->{
@@ -278,6 +304,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     private void voiceMenu(){
         if(reader==null)return;
         LinearLayout panel=openSheet("Voces","Tu narración, en español");
+        sheetRow(panel,"Ilustraciones","Aviso y espera · "+reader.illustrationSeconds()+" segundos",false,this::illustrations);
         sheetRow(panel,"Motor de voz","Aplicaciones de voz instaladas",false,()->{
             LinearLayout choices=openSheet("Motor de voz","Selecciona la aplicación que narrará tus libros");
             List<TextToSpeech.EngineInfo> engines=reader.engines();
@@ -297,6 +324,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     private LinearLayout openSheet(String title,String subtitle) {
         if(sheetOverlay!=null)root.removeView(sheetOverlay);
         if(web!=null){web.readerModal(true);web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);}
+        if(pdf!=null){pdf.readerModal(true);pdf.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);}
         sheetOverlay=new FrameLayout(this);sheetOverlay.setClickable(true);
         View scrim=new View(this);scrim.setBackgroundColor(0x99000000);scrim.setContentDescription("Cerrar panel");scrim.setOnClickListener(v->closeSheet());sheetOverlay.addView(scrim,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout card=column();card.setClickable(true);card.setPadding(dp(20),dp(12),dp(20),dp(16));card.setBackground(rounded(dark?0xFF102C34:0xFFFAFCF9,24));card.setElevation(dp(16));
@@ -327,11 +355,12 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         if(sheetOverlay==null)return;
         root.removeView(sheetOverlay);sheetOverlay=null;
         if(web!=null){web.readerModal(false);web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}
+        if(pdf!=null){pdf.readerModal(false);pdf.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}
     }
     private void message(String title,String content){new AlertDialog.Builder(this).setTitle(title).setMessage(content).setPositiveButton("Entendido",null).show();}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==10 && result==RESULT_OK && data!=null){pendingUri=data.getData();consumePending();}}
     @Override public void onBackPressed(){if(sheetOverlay!=null)closeSheet();else if(reading)buildHome();else super.onBackPressed();}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);if(reading && reader!=null)state.putString("readingId",reader.currentId());}
-    private void disposeWeb(){if(web!=null){web.removeJavascriptInterface("AndroidReader");web.destroy();web=null;}}
+    private void disposeWeb(){if(web!=null){web.removeJavascriptInterface("AndroidReader");web.destroy();web=null;}if(pdf!=null){pdf.close();pdf=null;}}
     @Override protected void onDestroy(){if(reader!=null)reader.listener=null;if(bound)unbindService(connection);disposeWeb();images.shutdownNow();super.onDestroy();}
 }

@@ -37,12 +37,14 @@ jobs:
             adb pull /sdcard/Download/VladERTests/panel-aa.png panel-aa.png
             adb pull /sdcard/Download/VladERTests/panel-voces.png panel-voces.png
             adb pull /sdcard/Download/VladERTests/panel-indice.png panel-indice.png
+            adb pull /sdcard/Download/VladERTests/pdf-reader.png pdf-reader.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: paneles-android
           path: |
             panel-*.png
+            pdf-reader.png
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
   pagination:

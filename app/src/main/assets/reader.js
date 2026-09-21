@@ -51,8 +51,10 @@
     return -1;
   }
   function visibleSpeech() {
-    for(const el of book.querySelectorAll('[data-chunk]')) {
+    for(const el of book.querySelectorAll('[data-loc]')) {
       if(![...el.getClientRects()].some(r=>pageAtRect(r)===page))continue;
+      if(el.tagName==='IMG')return {loc:'loc:'+el.dataset.loc,offset:0,chunk:0};
+      if(el.dataset.chunk===undefined)continue;
       const offset=visibleOffset(el);
       if(offset>=0)return {loc:'loc:'+el.dataset.loc,offset,chunk:Number(el.dataset.chunk)};
     }

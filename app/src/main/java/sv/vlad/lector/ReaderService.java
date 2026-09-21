@@ -27,6 +27,10 @@ public class ReaderService extends Service {
     private int generation;
     private String utterance = "", fileId = "";
     private int utteranceStart;
+    private int narrationIndex=-1;
+    private boolean illustrationWait;
+    private final Narration.Delay illustrationDelay=new Narration.Delay();
+    public String speechLocator="";
     private final SpeechResumeState speechState = new SpeechResumeState();
     public EpubReader.Book book;
     public int chapter, chunk;
@@ -34,7 +38,7 @@ public class ReaderService extends Service {
     public String locator = "";
     public int locatorOffset;
     public boolean playing, busy;
-    public String status = "Importa un EPUB para comenzar";
+    public String status = "Importa un EPUB o PDF para comenzar";
     public Runnable listener;
 
     @Override public void onCreate() {
@@ -93,21 +97,13 @@ public class ReaderService extends Service {
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     public void onStart(String id) { }
                     @Override public void onRangeStart(String id,int start,int end,int frame) { main.post(() -> {
-                        if(!playing || !id.equals(utterance) || book==null)return;
+                        if(!playing || !id.equals(utterance) || book==null || currentItem()==null || currentItem().image())return;
                         speechOffset=utteranceStart+start;
                         locator="chunk:"+chunk;locatorOffset=speechOffset;
                         save();changed();
                     }); }
                     public void onDone(String id) { main.post(() -> {
-                        if (!playing || !id.equals(utterance)) return;
-                        chunk++;
-                        if (chunk >= book.chapters.get(chapter).chunks.size()) { chunk = 0; chapter++; }
-                        if (chapter >= book.chapters.size()) {
-                            chapter = book.chapters.size() - 1;
-                            chunk = Math.max(0, book.chapters.get(chapter).chunks.size() - 1);
-                            pause(); speechState.clear(); status = "Libro terminado"; changed(); return;
-                        }
-                        speechOffset = 0; save(); speak();
+                        utteranceDone(id);
                     }); }
                     public void onError(String id) { main.post(() -> {
                         if (!id.equals(utterance)) return;
@@ -145,6 +141,9 @@ public class ReaderService extends Service {
         changed();
     }
     public float rate() { return prefs.getFloat("rate", 1f); }
+    public int illustrationSeconds(){return Math.max(0,Math.min(30,prefs.getInt("illustrationSeconds",3)));}
+    public boolean announceIllustrations(){return prefs.getBoolean("announceIllustrations",true);}
+    public void illustrationSettings(boolean enabled,int seconds){prefs.edit().putBoolean("announceIllustrations",enabled).putInt("illustrationSeconds",Math.max(0,Math.min(30,seconds))).apply();}
     public void setRate(float value) { prefs.edit().putFloat("rate", value).apply(); if (playing) { pause(); play(); } changed(); }
     public void importBook(Uri uri) {
         if (busy) return;
@@ -152,23 +151,29 @@ public class ReaderService extends Service {
         io.execute(() -> {
             File temporary = null;
             try {
-                temporary = File.createTempFile("import-", ".epub", getCacheDir());
+                temporary = File.createTempFile("import-", ".book", getCacheDir());
                 MessageDigest digest = MessageDigest.getInstance("SHA-256");
                 try (InputStream in = getContentResolver().openInputStream(uri); OutputStream out = new FileOutputStream(temporary)) {
                     if (in == null) throw new IOException("No se pudo abrir el archivo.");
                     byte[] buffer = new byte[8192]; int n; long total = 0;
                     while ((n = in.read(buffer)) != -1) {
                         total += n;
-                        if (total > 100L * 1024 * 1024) throw new IOException("El EPUB supera 100 MB.");
+                        if (total > 100L * 1024 * 1024) throw new IOException("El libro supera 100 MB.");
                         digest.update(buffer, 0, n); out.write(buffer, 0, n);
                     }
                 }
-                EpubReader.Book parsed = EpubReader.open(temporary);
+                boolean pdf=PdfBookReader.isPdf(temporary);
+                String displayName="Libro PDF";
+                try(android.database.Cursor cursor=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){
+                    if(cursor!=null && cursor.moveToFirst())displayName=cursor.getString(0);
+                }catch(Exception ignored){}
+                if(displayName==null)displayName="Libro PDF";
+                EpubReader.Book parsed = pdf?PdfBookReader.open(this,temporary,displayName):EpubReader.open(temporary);
                 StringBuilder hash = new StringBuilder();
                 for (byte b : digest.digest()) hash.append(String.format(Locale.ROOT, "%02x", b));
-                String id = hash + ".epub";
+                String id = hash + (pdf?".pdf":".epub");
                 File destination = new File(getFilesDir(), id);
-                if (!destination.exists() && !temporary.renameTo(destination)) throw new IOException("No se pudo guardar el EPUB.");
+                if (!destination.exists() && !temporary.renameTo(destination)) throw new IOException("No se pudo guardar el libro.");
                 prefs.edit().putString("title:" + id, parsed.title).putString("author:" + id, parsed.author)
                     .putString("cover:" + id, parsed.cover).putInt(id + ":chapters", parsed.chapters.size()).apply();
                 main.post(() -> loaded(parsed, id));
@@ -178,23 +183,25 @@ public class ReaderService extends Service {
     }
     public void openSaved(String id) {
         if (busy) return;
-        if (!id.matches("[a-f0-9]{64}\\.epub")) return;
+        if (!id.matches("[a-f0-9]{64}\\.(epub|pdf)")) return;
         pause(); busy = true; status = "Abriendo libro…"; changed();
         io.execute(() -> {
-            try { EpubReader.Book parsed = EpubReader.open(new File(getFilesDir(), id)); main.post(() -> loaded(parsed, id)); }
+            try { EpubReader.Book parsed = id.endsWith(".pdf")?PdfBookReader.open(this,new File(getFilesDir(),id),prefs.getString("title:"+id,"Libro PDF")):EpubReader.open(new File(getFilesDir(), id)); main.post(() -> loaded(parsed, id)); }
             catch (Exception e) { fail(e); }
         });
     }
     private void loaded(EpubReader.Book parsed, String id) {
         if (destroyed) return;
-        book = parsed; fileId = id; busy = false; speechState.clear();
+        book = parsed; fileId = id; busy = false; speechState.clear();resetNarration();
         chapter = Math.max(0, Math.min(prefs.getInt(id + ":chapter", 0), book.chapters.size() - 1));
         chunk = Math.max(0, Math.min(prefs.getInt(id + ":chunk", 0), book.chapters.get(chapter).chunks.size() - 1));
-        locator = prefs.getString(id + ":locator", "chunk:" + chunk);
+        locator = prefs.getString(id + ":locator", "");
         locatorOffset = prefs.getInt(id + ":offset", 0); speechOffset = prefs.getInt(id + ":speechOffset", 0);
         prefs.edit().putString("last", id).putString("author:" + id, parsed.author).putString("cover:" + id, parsed.cover)
             .putInt(id + ":chapters", parsed.chapters.size()).putLong(id + ":opened", System.currentTimeMillis()).apply();
-        loadVersion++; status = "Libro listo"; changed();
+        loadVersion++; status = "Libro listo";
+        if(book.pdf && book.chapters.stream().allMatch(c->c.chunks.isEmpty()))status="PDF sin texto extraíble: puedes verlo, pero la voz necesita texto (sin OCR).";
+        changed();
     }
     private void fail(Exception e) { main.post(() -> { if (!destroyed) { busy = false; status = "Error: " + e.getMessage(); changed(); } }); }
     public Map<String, String> library() {
@@ -217,6 +224,7 @@ public class ReaderService extends Service {
         locator = loc; locatorOffset = Math.max(0, offset);
         chunk = Math.max(0, Math.min(firstChunk, book.chapters.get(chapter).chunks.size() - 1));
         speechOffset = locatorOffset; save();
+        narrationIndex=-1;illustrationWait=false;
     }
     public void play() {
         if (busy || book == null || playing) return;
@@ -242,25 +250,47 @@ public class ReaderService extends Service {
     }
     private void speak() {
         if (!playing || book == null) return;
-        while (book.chapters.get(chapter).chunks.isEmpty()) {
-            if (chapter + 1 >= book.chapters.size()) { pause(); speechState.clear(); status = "Libro terminado"; changed(); return; }
-            chapter++; chunk = 0; speechOffset = 0;
+        if(narrationIndex<0)narrationIndex=Narration.find(book.chapters.get(chapter).narration,locator,chunk);
+        while(true){
+            List<Narration.Item> items=book.chapters.get(chapter).narration;
+            if(narrationIndex>=items.size()){
+                if(chapter+1>=book.chapters.size()){pause();speechState.clear();resetNarration();status="Libro terminado";changed();return;}
+                chapter++;chunk=0;speechOffset=0;narrationIndex=0;illustrationWait=false;continue;
+            }
+            if(items.get(narrationIndex).image() && !announceIllustrations()){narrationIndex++;illustrationWait=false;continue;}
+            break;
         }
-        locator = "chunk:" + chunk; locatorOffset = speechOffset; save();
+        Narration.Item item=currentItem();
+        speechLocator=item.locator;
+        if(!item.image())chunk=item.chunk;
+        locator = item.image()?item.locator:"chunk:"+chunk; locatorOffset = speechOffset; save();
         if (wake.isHeld()) wake.release();
         wake.acquire(10 * 60 * 1000L);
         utterance = UUID.randomUUID().toString();
-        status = "Leyendo · fragmento " + (chunk + 1) + " de " + book.chapters.get(chapter).chunks.size();
         tts.setSpeechRate(rate());
-        String phrase = book.chapters.get(chapter).chunks.get(chunk);
-        int start = Math.max(0, Math.min(speechOffset, phrase.length() - 1));
-        utteranceStart=start;
-        if (tts.speak(phrase.substring(start), TextToSpeech.QUEUE_FLUSH, null, utterance) == TextToSpeech.ERROR) {
+        int result;
+        if(item.image()){
+            status=illustrationWait?"Ilustración · pausa antes de continuar":"Ilustración";
+            result=illustrationWait?tts.playSilentUtterance(illustrationDelay.start(SystemClock.uptimeMillis()),TextToSpeech.QUEUE_FLUSH,utterance):tts.speak("Ilustración",TextToSpeech.QUEUE_FLUSH,null,utterance);
+        }else{
+            status = "Leyendo · fragmento " + (chunk + 1) + " de " + book.chapters.get(chapter).chunks.size();
+            String phrase = book.chapters.get(chapter).chunks.get(chunk);
+            int start = Math.max(0, Math.min(speechOffset, phrase.length() - 1));utteranceStart=start;
+            result=tts.speak(phrase.substring(start), TextToSpeech.QUEUE_FLUSH, null, utterance);
+        }
+        if (result == TextToSpeech.ERROR) {
             pause(); status = "El motor no pudo reproducir esta voz.";
         }
         changed();
     }
+    void utteranceDone(String id){
+        if(!playing || !id.equals(utterance))return;
+        Narration.Item item=currentItem();
+        if(item!=null && item.image() && !illustrationWait){illustrationWait=true;illustrationDelay.set(illustrationSeconds()*1000L);speak();}
+        else {illustrationWait=false;narrationIndex++;speechOffset=0;speak();}
+    }
     public void pause() {
+        if(illustrationWait)illustrationDelay.pause(SystemClock.uptimeMillis());
         speechState.paused(playing);
         playing = false; utterance = "";
         if (tts != null) tts.stop();
@@ -274,7 +304,10 @@ public class ReaderService extends Service {
         if (book != null) goChapter(Math.max(0, Math.min(chapter + delta, book.chapters.size() - 1)));
     }
     public boolean canResumeSpeech() { return speechState.canResume(); }
-    public void manualNavigation() { pause(); speechState.clear(); }
+    private Narration.Item currentItem(){if(book==null)return null;List<Narration.Item> items=book.chapters.get(chapter).narration;return narrationIndex>=0 && narrationIndex<items.size()?items.get(narrationIndex):null;}
+    public boolean speakingIllustration(){Narration.Item item=currentItem();return item!=null && item.image();}
+    private void resetNarration(){narrationIndex=-1;illustrationWait=false;speechLocator="";}
+    public void manualNavigation() { pause(); speechState.clear();resetNarration(); }
     public void goChapter(int index) {
         if (book == null || busy) return;
         boolean resume = playing; manualNavigation(); chapter = Math.max(0, Math.min(index, book.chapters.size() - 1));

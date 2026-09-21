@@ -74,7 +74,13 @@ const assets = path.join(__dirname, '../app/src/main/assets');
     window.AndroidReader.playVisible=(epoch,loc,offset,chunk)=>{window.speechRequest={epoch,loc,offset,chunk};};
     window.firstPaintedCharacter=()=>{
       const bounds=document.getElementById('viewport').getBoundingClientRect();
-      for(const el of document.querySelectorAll('#book [data-chunk]')) {
+      for(const el of document.querySelectorAll('#book [data-loc]')) {
+        if(el.tagName==='IMG'){
+          const r=el.getBoundingClientRect();
+          if(r.width>0 && r.right>bounds.left && r.left<bounds.right && r.bottom>bounds.top && r.top<bounds.bottom)return {loc:'loc:'+el.dataset.loc,offset:0,chunk:0};
+          continue;
+        }
+        if(el.dataset.chunk===undefined)continue;
         const node=el.firstChild, range=document.createRange();
         for(let i=0;i<node.length;i++) {
           if(!node.data[i].trim())continue;
@@ -103,7 +109,7 @@ const assets = path.join(__dirname, '../app/src/main/assets');
         const visibleRects=[...document.querySelectorAll('#book [data-chunk]')].flatMap(el=>[...el.getClientRects()])
           .filter(r=>r.right>bounds.left && r.left<bounds.right && r.bottom>bounds.top && r.top<bounds.bottom);
         const leftMargin=visibleRects.length?Math.min(...visibleRects.map(r=>r.left-bounds.left)):8;
-        if(expected && request)Reader.speak(request.chunk,request.offset);
+        if(expected && request){const el=document.querySelector('[data-loc="'+request.loc.slice(4)+'"]');if(el && el.tagName==='IMG')Reader.locate(request.loc);else Reader.speak(request.chunk,request.offset);}
         return {expected,request,drift,leftMargin,after:Reader.snapshot().page};
       },n);
       assert(result.drift<=1,`page ${n} must not drift or clip its left edge: ${result.drift}`);
