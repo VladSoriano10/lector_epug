@@ -1,6 +1,10 @@
 # VladER · Android
 
-Versión 0.3.3: contenedor de texto con ancho entero compartido por la columna y el avance, para evitar deriva en pantallas con medidas fraccionarias. Índice, voces, velocidad y Aa usan paneles propios dentro de la misma ventana, sin redimensionar el lector al abrir/cerrar y con bloqueo de gestos residuales. Conserva voz, pausa/reanudación, ilustraciones y firma permanente. Android 8 o superior; falta confirmar el resultado en el Redmi Note 11 con los EPUB concretos del usuario.
+Versión 0.4.0: biblioteca EPUB y PDF, visor PDF independiente con zoom y voz desde la página actual. La narración anuncia «Ilustración», espera 3 segundos por defecto y continúa; se configura en **Voces → Ilustraciones** o **Aa → Ilustraciones** (0–30 segundos, aviso desactivable). Conserva los identificadores y marcadores EPUB, sus márgenes, paneles y firma permanente. Android 8 o superior.
+
+Los PDF mantienen sus páginas y colores originales; el tema oscuro cambia los controles. La voz necesita texto extraíble: no incluye OCR. Detecta imágenes raster significativas en el orden vertical de la página; dibujos vectoriales, fondos y composiciones con varias columnas pueden requerir revisión. El índice PDF ofrece páginas, no capítulos inferidos. Los archivos protegidos con contraseña no se importan. Límite: 100 MB y 1500 páginas por PDF.
+
+Respaldo estable anterior: [`rollback/v0.3.3-epub-estable`](https://github.com/VladSoriano10/lector_epug/tree/rollback/v0.3.3-epub-estable). Consulta [ROLLBACK.md](docs/ROLLBACK.md) para volver sin perder la firma.
 
 **Para actualizar sin desinstalar:** completa una vez [la configuración de firma privada](docs/FIRMA.md). Luego usa **VladER - APK con firma permanente**, no el APK debug de pruebas. La clave no se incluye en el repositorio; la firma queda pendiente hasta guardar los secretos y ejecutar ese workflow. El cambio desde la antigua firma debug puede requerir una última reinstalación, con pérdida de datos locales.
 
@@ -10,10 +14,10 @@ Las portadas se buscan mediante EPUB 3, metadatos EPUB 2, guía de portada, nomb
 
 ## Obtener el APK sin Android Studio
 
-1. Abre **Actions → Compilar APK** en este repositorio.
-2. Entra en una ejecución terminada con marca verde.
-3. En **Artifacts**, descarga **lector-epub-apk** (inicia sesión en GitHub).
-4. Extrae el ZIP e instala `app-debug.apk` en el teléfono. Autoriza la instalación desde el navegador o gestor de archivos cuando Android lo solicite.
+1. Abre **Actions → VladER - APK con firma permanente → Run workflow → main**.
+2. Espera a que termine con marca verde y abre esa ejecución.
+3. En **Artifacts**, descarga **VladER-firma-permanente** (inicia sesión en GitHub).
+4. Extrae el ZIP e instala `VladER.apk` sobre la versión firmada anterior. Se mantienen biblioteca y progreso si se usa la misma clave.
 
 El APK es de prueba y no se publica en Google Play. Las compilaciones de prueba usan la clave debug del ejecutor: entre ejecuciones puede cambiar. Si Android rechaza una actualización por firma distinta, hará falta desinstalar la versión anterior, lo que elimina su biblioteca y progreso. Conserva tus EPUB originales. Para uso continuado, falta configurar una clave de firma estable privada.
 

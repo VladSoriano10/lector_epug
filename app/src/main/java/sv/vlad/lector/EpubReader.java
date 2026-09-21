@@ -19,8 +19,17 @@ public final class EpubReader {
     public static final class Chapter {
         public final String title, path, html;
         public final List<String> chunks;
+        public final List<Narration.Item> narration;
         Chapter(String title, String path, String html, List<String> chunks) {
             this.title = title; this.path = path; this.html = html; this.chunks = chunks;
+            this.narration = new ArrayList<>();
+            for (Element el : Jsoup.parseBodyFragment(html).select("[data-loc]")) {
+                if (el.tagName().equals("img")) narration.add(Narration.Item.image("loc:"+el.attr("data-loc")));
+                else if (el.hasAttr("data-chunk")) narration.add(Narration.Item.text(Integer.parseInt(el.attr("data-chunk")), "loc:"+el.attr("data-loc")));
+            }
+        }
+        Chapter(String title, List<String> chunks, List<Narration.Item> narration) {
+            this.title=title;this.path="";this.html="";this.chunks=chunks;this.narration=narration;
         }
     }
     public static final class TocEntry {
@@ -32,6 +41,7 @@ public final class EpubReader {
         public final String title, author, cover;
         public final List<Chapter> chapters;
         public final List<TocEntry> toc;
+        public boolean pdf;
         Book(String title, String author, String cover, List<Chapter> chapters, List<TocEntry> toc) {
             this.title = title; this.author = author; this.cover = cover; this.chapters = chapters; this.toc = toc;
         }
