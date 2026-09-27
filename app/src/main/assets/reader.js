@@ -6,6 +6,7 @@
   let touch = null, suppressClick = false, resizeTimer;
   let turnSheet = null, turnAnimation = null;
   let modalOpen=false, ignoreInputUntil=0;
+  let speakingElement=null;
   function cancelTurn() {
     if(turnAnimation)turnAnimation.cancel();
     if(turnSheet)turnSheet.remove();
@@ -122,6 +123,7 @@
   window.Reader={
     async load(html,dark,font,loc,offset,token) {
       cancelTurn();
+      speakingElement=null;
       epoch=token; const ownEpoch=token; ready=false; viewport.scrollLeft=0; page=0;
       book.style.transform='translateX(0px)';
       document.documentElement.classList.toggle('dark',dark); book.style.fontSize=font+'px';
@@ -153,18 +155,22 @@
     locate(loc,offset=0) { cancelTurn();restore(loc,offset); },
     speak(chunk,offset=0) {
       cancelTurn();
-      book.querySelectorAll('.speaking').forEach(e=>e.classList.remove('speaking'));
       const el=document.getElementById('c'+chunk);
-      if(el) { el.classList.add('speaking'); go(charPage(el,offset)); }
+      if(el) {
+        if(speakingElement!==el){if(speakingElement)speakingElement.classList.remove('speaking');el.classList.add('speaking');speakingElement=el;}
+        const target=charPage(el,offset);
+        // Word progress needs no page scan or bridge report until the page changes.
+        if(target!==page)go(target);
+      }
     },
     appearance(dark,font) {
       const saved=firstVisible(); document.documentElement.classList.toggle('dark',dark);book.style.fontSize=font+'px';
       layout(saved.loc,saved.offset);
     },
-    clearSpeech() { book.querySelectorAll('.speaking').forEach(e=>e.classList.remove('speaking')); },
+    clearSpeech() { if(speakingElement)speakingElement.classList.remove('speaking');speakingElement=null; },
     snapshot() {return {ready,epoch,page,count,stride,position:firstVisible(),height:viewport.clientHeight,width:viewport.clientWidth};}
   };
-  window.addEventListener('resize',()=>{clearTimeout(resizeTimer);const saved={...current};resizeTimer=setTimeout(()=>{if(ready)layout(saved.loc,saved.offset);},100);});
+  window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(ready)layout(current.loc,current.offset);},100);});
   document.addEventListener('touchstart',e=>{touch=null;if(!modalOpen && Date.now()>=ignoreInputUntil && e.touches.length===1)touch={x:e.touches[0].clientX,y:e.touches[0].clientY,time:Date.now()};},{passive:true});
   document.addEventListener('touchcancel',()=>{touch=null;},{passive:true});
   document.addEventListener('touchend',e=>{

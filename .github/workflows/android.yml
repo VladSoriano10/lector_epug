@@ -33,7 +33,9 @@ jobs:
           script: |
             adb shell wm size 1080x1920
             adb shell wm density 420
-            gradle connectedDebugAndroidTest --no-daemon
+            adb shell svc wifi disable
+            adb shell svc data disable
+            gradle connectedDebugAndroidTest --no-daemon || { adb shell dumpsys activity exit-info sv.vlad.lector; adb logcat -d -b crash -b events; exit 1; }
             adb pull /sdcard/Download/VladERTests/panel-aa.png panel-aa.png
             adb pull /sdcard/Download/VladERTests/panel-voces.png panel-voces.png
             adb pull /sdcard/Download/VladERTests/panel-indice.png panel-indice.png

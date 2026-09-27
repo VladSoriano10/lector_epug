@@ -1,5 +1,7 @@
 # VladER · Android
 
+Versión 0.4.1: lectura en segundo plano con menos trabajo por palabra. Al ocultar la app se desconecta la actualización del visor EPUB/PDF; al volver se sincroniza con la narración. La posición de voz sigue actualizándose en memoria, con guardados periódicos y un guardado al pausar. La notificación deja de reconstruirse por palabra y conserva **Reanudar** al pausar. **Cerrar** retira los controles y detiene la sesión; en pausa no se mantiene el bloqueo de CPU ni el foco de audio. Si Android destruye el servicio y la notificación sigue disponible, Reanudar vuelve a cargar el libro y su posición guardada. Forzar la detención de la app desde Android puede eliminar la notificación.
+
 Versión 0.4.0: biblioteca EPUB y PDF, visor PDF independiente con zoom y voz desde la página actual. La narración anuncia «Ilustración», espera 3 segundos por defecto y continúa; se configura en **Voces → Ilustraciones** o **Aa → Ilustraciones** (0–30 segundos, aviso desactivable). Conserva los identificadores y marcadores EPUB, sus márgenes, paneles y firma permanente. Android 8 o superior.
 
 Los PDF mantienen sus páginas y colores originales; el tema oscuro cambia los controles. La voz necesita texto extraíble: no incluye OCR. Detecta imágenes raster significativas en el orden vertical de la página; dibujos vectoriales, fondos y composiciones con varias columnas pueden requerir revisión. El índice PDF ofrece páginas, no capítulos inferidos. Los archivos protegidos con contraseña no se importan. Límite: 100 MB y 1500 páginas por PDF.

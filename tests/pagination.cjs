@@ -24,6 +24,11 @@ const assets = path.join(__dirname, '../app/src/main/assets');
   await page.waitForFunction(()=>Reader.snapshot().count>5);
   let first=await page.evaluate(()=>Reader.snapshot());
   assert.equal(first.page,0);assert(first.count>5);
+  // A delayed resize must not restore the position from before a newer page turn.
+  await page.evaluate(()=>{window.dispatchEvent(new Event('resize'));Reader.page(3);});
+  await page.waitForTimeout(200);
+  assert.equal((await page.evaluate(()=>Reader.snapshot())).page,3,'pending resize preserves the latest reading position');
+  await page.evaluate(()=>Reader.page(0));
   const transition=await page.evaluate(()=>{
     Reader.turn(1);
     const sheet=document.querySelector('.turn-sheet');
@@ -58,6 +63,14 @@ const assets = path.join(__dirname, '../app/src/main/assets');
   await page.evaluate(()=>Reader.appearance(true,20));
   await page.evaluate(()=>Reader.speak(6));
   assert.equal(await page.locator('#c6').getAttribute('class'),'speaking');
+  const wordUpdates=await page.evaluate(()=>{
+    const original=AndroidReader.position;let count=0;AndroidReader.position=()=>count++;
+    const currentPage=Reader.snapshot().page;
+    for(let n=0;n<20;n++)Reader.speak(6,n);
+    AndroidReader.position=original;return {count,page:Reader.snapshot().page,currentPage};
+  });
+  assert.equal(wordUpdates.page,wordUpdates.currentPage);
+  assert.equal(wordUpdates.count,0,'word progress on the same page must not scan/report page positions');
   const image = await page.locator('img').boundingBox();
   assert(image.height<=first.height,'tall illustration fits page height');assert(image.width<=first.width,'illustration fits width');
   await page.evaluate(()=>Reader.page(3));

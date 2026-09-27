@@ -23,7 +23,12 @@ public class ReaderService extends Service {
     private AudioFocusRequest focus;
     private MediaSession session;
     private PowerManager.WakeLock wake;
-    private boolean ready, foreground, destroyed;
+    private boolean ready, foreground, destroyed, notificationVisible, resumeRequested, engineInitializing;
+    private String publishedMetadata="", publishedPlayback="", publishedNotification="";
+    private long lastCheckpoint, lastUiUpdate;
+    private static final long CHECKPOINT_MS=5000, UI_UPDATE_MS=200;
+    private boolean progressPending;
+    private final Runnable progressUi=this::deliverProgress;
     private int generation;
     private String utterance = "", fileId = "";
     private int utteranceStart;
@@ -39,7 +44,11 @@ public class ReaderService extends Service {
     public int locatorOffset;
     public boolean playing, busy;
     public String status = "Importa un EPUB o PDF para comenzar";
-    public Runnable listener;
+    private Runnable listener;
+    public void setListener(Runnable value){main.removeCallbacks(progressUi);progressPending=false;listener=value;}
+    public void removeListener(Runnable value){if(listener==value)setListener(null);}
+    private void deliverProgress(){progressPending=false;if(listener!=null && playing)notifyUi();}
+    private void notifyUi(){main.removeCallbacks(progressUi);progressPending=false;lastUiUpdate=SystemClock.uptimeMillis();if(listener!=null)listener.run();}
 
     @Override public void onCreate() {
         super.onCreate();
@@ -56,7 +65,8 @@ public class ReaderService extends Service {
         session.setCallback(new MediaSession.Callback() {
             @Override public void onPlay() { play(); }
             @Override public void onPause() { pause(); }
-            @Override public void onStop() { pause(); stopSelf(); }
+            @Override public void onStop() { stopPlayback(); }
+            @Override public void onCustomAction(String action,Bundle extras){if("STOP".equals(action))stopPlayback();}
             @Override public void onSkipToNext() { moveChapter(1); }
             @Override public void onSkipToPrevious() { moveChapter(-1); }
         });
@@ -71,25 +81,38 @@ public class ReaderService extends Service {
     };
     @Override public IBinder onBind(Intent intent) { return binder; }
     public void changed() {
-        if (listener != null) listener.run();
-        session.setPlaybackState(new PlaybackState.Builder().setActions(PlaybackState.ACTION_PLAY |
-            PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP |
+        notifyUi();
+        if(session==null)return;
+        String playbackKey=playing+":"+rate()+":"+resumeRequested;
+        if(!playbackKey.equals(publishedPlayback)){
+            publishedPlayback=playbackKey;
+            session.setPlaybackState(new PlaybackState.Builder().setActions((playing?PlaybackState.ACTION_PAUSE:PlaybackState.ACTION_PLAY) |
+            PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP |
             PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS)
-            .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
+            .addCustomAction("STOP","Cerrar",android.R.drawable.ic_menu_close_clear_cancel)
+            .setState(resumeRequested?PlaybackState.STATE_BUFFERING:playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, playing ? rate() : 0).build());
-        if (book != null) session.setMetadata(new MediaMetadata.Builder()
+        }
+        String metadataKey=book==null?"":fileId+":"+book.title+":"+chapter;
+        if(book!=null && !metadataKey.equals(publishedMetadata)){
+            publishedMetadata=metadataKey;session.setMetadata(new MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, book.title)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, book.chapters.get(chapter).title).build());
-        if (foreground) getSystemService(NotificationManager.class).notify(1, notification());
+        }
+        String notificationKey=metadataKey+":"+playbackKey;
+        if(notificationVisible && !notificationKey.equals(publishedNotification)){
+            publishedNotification=notificationKey;getSystemService(NotificationManager.class).notify(1,notification());
+        }
     }
     public void initEngine(String name) {
-        pause(); ready = false; generation++;
+        pause(); ready = false; engineInitializing=true; generation++;
         int current = generation;
         if (tts != null) tts.shutdown();
         prefs.edit().putString("engine", name).apply();
         status = "Preparando voces…"; changed();
         tts = new TextToSpeech(this, result -> main.post(() -> {
             if (destroyed || generation != current) return;
+            engineInitializing=false;
             ready = result == TextToSpeech.SUCCESS;
             if (ready) {
                 tts.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
@@ -97,10 +120,7 @@ public class ReaderService extends Service {
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     public void onStart(String id) { }
                     @Override public void onRangeStart(String id,int start,int end,int frame) { main.post(() -> {
-                        if(!playing || !id.equals(utterance) || book==null || currentItem()==null || currentItem().image())return;
-                        speechOffset=utteranceStart+start;
-                        locator="chunk:"+chunk;locatorOffset=speechOffset;
-                        save();changed();
+                        utteranceRange(id,start);
                     }); }
                     public void onDone(String id) { main.post(() -> {
                         utteranceDone(id);
@@ -118,7 +138,7 @@ public class ReaderService extends Service {
                 if (chosen != null) tts.setVoice(chosen);
                 status = voices.isEmpty() ? "Instala o descarga una voz local en español desde Voces." : "Voz lista";
             } else status = "No se pudo iniciar el motor de voz. Selecciona otro desde Voces.";
-            changed();
+            changed();tryStartPlayback();
         }), name.isEmpty() ? null : name);
     }
     public List<TextToSpeech.EngineInfo> engines() {
@@ -197,13 +217,17 @@ public class ReaderService extends Service {
         chunk = Math.max(0, Math.min(prefs.getInt(id + ":chunk", 0), book.chapters.get(chapter).chunks.size() - 1));
         locator = prefs.getString(id + ":locator", "");
         locatorOffset = prefs.getInt(id + ":offset", 0); speechOffset = prefs.getInt(id + ":speechOffset", 0);
+        if(resumeRequested && prefs.getBoolean(id+":illustrationWait",false)){
+            narrationIndex=Narration.find(book.chapters.get(chapter).narration,locator,chunk);
+            if(currentItem()!=null && currentItem().image()){illustrationWait=true;illustrationDelay.set(prefs.getLong(id+":illustrationRemaining",0));}
+        }
         prefs.edit().putString("last", id).putString("author:" + id, parsed.author).putString("cover:" + id, parsed.cover)
             .putInt(id + ":chapters", parsed.chapters.size()).putLong(id + ":opened", System.currentTimeMillis()).apply();
         loadVersion++; status = "Libro listo";
         if(book.pdf && book.chapters.stream().allMatch(c->c.chunks.isEmpty()))status="PDF sin texto extraíble: puedes verlo, pero la voz necesita texto (sin OCR).";
-        changed();
+        changed();tryStartPlayback();
     }
-    private void fail(Exception e) { main.post(() -> { if (!destroyed) { busy = false; status = "Error: " + e.getMessage(); changed(); } }); }
+    private void fail(Exception e) { main.post(() -> { if (!destroyed) { busy = false; if(resumeRequested)pause();status = "Error: " + e.getMessage(); changed(); } }); }
     public Map<String, String> library() {
         Map<String, String> books = new TreeMap<>();
         for (Map.Entry<String, ?> e : prefs.getAll().entrySet())
@@ -211,15 +235,30 @@ public class ReaderService extends Service {
         return books;
     }
     private void save() {
+        lastCheckpoint=SystemClock.uptimeMillis();
         if (book != null) prefs.edit().putInt(fileId + ":chapter", chapter).putInt(fileId + ":chunk", chunk)
             .putString(fileId + ":locator", locator).putInt(fileId + ":offset", locatorOffset)
-            .putInt(fileId + ":speechOffset", speechOffset).apply();
+            .putInt(fileId + ":speechOffset", speechOffset)
+            .putBoolean(fileId+":illustrationWait",illustrationWait).putLong(fileId+":illustrationRemaining",illustrationDelay.remaining()).apply();
+    }
+    public void checkpoint(){save();}
+    void utteranceRange(String id,int start){
+        if(!playing || !id.equals(utterance) || book==null || currentItem()==null || currentItem().image())return;
+        speechOffset=utteranceStart+start;locator="chunk:"+chunk;locatorOffset=speechOffset;
+        long now=SystemClock.uptimeMillis();
+        if(now-lastCheckpoint>=CHECKPOINT_MS)save();
+        // PDF follows pages, not words. A hidden Activity has no listener at all.
+        if(listener!=null && !book.pdf){
+            if(now-lastUiUpdate>=UI_UPDATE_MS)notifyUi();
+            else if(!progressPending){progressPending=true;main.postDelayed(progressUi,UI_UPDATE_MS-(now-lastUiUpdate));}
+        }
     }
     public String currentId() { return fileId; }
     public File currentFile() { return new File(getFilesDir(), fileId); }
     public void visualPosition(String loc, int offset, int firstChunk, int page, int pages) {
         if (book == null || busy) return;
-        prefs.edit().putInt(fileId + ":page", page).putInt(fileId + ":pages", pages).apply();
+        if(prefs.getInt(fileId+":page",-1)!=page || prefs.getInt(fileId+":pages",-1)!=pages)
+            prefs.edit().putInt(fileId + ":page", page).putInt(fileId + ":pages", pages).apply();
         if (speechState.protectsPosition(playing)) return;
         locator = loc; locatorOffset = Math.max(0, offset);
         chunk = Math.max(0, Math.min(firstChunk, book.chapters.get(chapter).chunks.size() - 1));
@@ -237,16 +276,33 @@ public class ReaderService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? "" : intent.getAction();
         if ("PLAY".equals(action)) {
-            foreground = true; startForeground(1, notification());
-            if (!ready || book == null || busy) { pause(); return START_NOT_STICKY; }
-            if (audio.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-                pause(); status = "El audio está ocupado. Intenta de nuevo."; changed(); return START_NOT_STICKY;
+            if(playing)return START_NOT_STICKY;
+            resumeRequested=true;foreground=true;notificationVisible=true;session.setActive(true);publishedNotification="";
+            startForeground(1,notification());
+            if(book==null && !busy){
+                String id=prefs.getString("last","");
+                if(!id.matches("[a-f0-9]{64}\\.(epub|pdf)")){stopPlayback();return START_NOT_STICKY;}
+                busy=true;status="Recuperando lectura…";
+                io.execute(()->{try{
+                    File file=new File(getFilesDir(),id);
+                    EpubReader.Book parsed=id.endsWith(".pdf")?PdfBookReader.open(this,file,prefs.getString("title:"+id,"Libro PDF")):EpubReader.open(file);
+                    main.post(()->loaded(parsed,id));
+                }catch(Exception e){fail(e);}});
             }
-            speechState.clear(); playing = true; speak();
+            changed();tryStartPlayback();
         } else if ("PAUSE".equals(action)) pause();
+        else if ("STOP".equals(action)) stopPlayback();
         else if ("NEXT".equals(action)) moveChapter(1);
         else if ("PREVIOUS".equals(action)) moveChapter(-1);
         return START_NOT_STICKY;
+    }
+    private void tryStartPlayback(){
+        if(!resumeRequested || destroyed || busy || book==null || engineInitializing)return;
+        if(!ready || tts.getVoice()==null || tts.getVoice().isNetworkConnectionRequired() || !"es".equals(tts.getVoice().getLocale().getLanguage())){
+            pause();status="Selecciona una voz local en español desde Voces.";changed();return;
+        }
+        if(audio.requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED){pause();status="El audio está ocupado. Intenta de nuevo.";changed();return;}
+        resumeRequested=false;speechState.clear();playing=true;speak();
     }
     private void speak() {
         if (!playing || book == null) return;
@@ -290,6 +346,7 @@ public class ReaderService extends Service {
         else {illustrationWait=false;narrationIndex++;speechOffset=0;speak();}
     }
     public void pause() {
+        resumeRequested=false;main.removeCallbacks(progressUi);
         if(illustrationWait)illustrationDelay.pause(SystemClock.uptimeMillis());
         speechState.paused(playing);
         playing = false; utterance = "";
@@ -297,8 +354,16 @@ public class ReaderService extends Service {
         if (wake != null && wake.isHeld()) wake.release();
         if (audio != null && focus != null) audio.abandonAudioFocusRequest(focus);
         save(); status = "En pausa";
-        if (foreground) { foreground = false; stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); }
+        if (foreground) { foreground = false; stopForeground(STOP_FOREGROUND_DETACH); }
         if (session != null) changed();
+    }
+    public void stopPlayback(){
+        notificationVisible=false;
+        // Remove while Android still associates this notification with the foreground service.
+        // pause() detaches it; detaching first can leave a foreground notification that cancel() cannot remove.
+        if(foreground){foreground=false;stopForeground(STOP_FOREGROUND_REMOVE);}
+        pause();getSystemService(NotificationManager.class).cancel(1);
+        session.setActive(false);publishedNotification="";stopSelf();
     }
     public void moveChapter(int delta) {
         if (book != null) goChapter(Math.max(0, Math.min(chapter + delta, book.chapters.size() - 1)));
@@ -321,22 +386,26 @@ public class ReaderService extends Service {
         save(); changed(); if (resume) play();
     }
     private PendingIntent command(String action) {
+        if("PLAY".equals(action))return PendingIntent.getForegroundService(this,action.hashCode(),new Intent(this,ReaderService.class).setAction(action),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         return PendingIntent.getService(this, action.hashCode(), new Intent(this, ReaderService.class).setAction(action), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
     private Notification notification() {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class)
             .setAction("sv.vlad.lector.RESUME").addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE);
+        Notification.MediaStyle style=new Notification.MediaStyle().setShowActionsInCompactView(0,1,2);
+        if(!destroyed)style.setMediaSession(session.getSessionToken());
         return new Notification.Builder(this, "reading").setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle(book == null ? "VladER" : book.title)
-            .setContentText(book == null ? "Preparando lectura" : book.chapters.get(chapter).title)
-            .setContentIntent(open).setOngoing(playing).setOnlyAlertOnce(true)
+            .setContentText(book == null ? "Preparando lectura" : (playing?"":"En pausa · ")+book.chapters.get(chapter).title)
+            .setContentIntent(open).setDeleteIntent(command("STOP")).setOngoing(playing).setOnlyAlertOnce(true)
             .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_previous, "Anterior", command("PREVIOUS")).build())
-            .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_pause, "Pausar", command("PAUSE")).build())
+            .addAction(new Notification.Action.Builder(playing?android.R.drawable.ic_media_pause:android.R.drawable.ic_media_play, playing?"Pausar":"Reanudar", command(playing?"PAUSE":"PLAY")).build())
             .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_next, "Siguiente", command("NEXT")).build())
-            .setStyle(new Notification.MediaStyle().setMediaSession(session.getSessionToken()).setShowActionsInCompactView(0, 1, 2)).build();
+            .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel,"Cerrar",command("STOP")).build())
+            .setStyle(style).build();
     }
     @Override public void onDestroy() {
-        destroyed = true; listener = null; pause();
+        destroyed = true; setListener(null); publishedNotification="";pause();
         if (tts != null) tts.shutdown();
         session.release(); unregisterReceiver(noisy); io.shutdownNow(); super.onDestroy();
     }

@@ -19,6 +19,8 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     private ReaderService reader;
     private SharedPreferences prefs;
     private boolean bound, reading, dark, controls, opening, navigating;
+    private boolean uiVisible, syncAfterReturn;
+    private final Runnable readerListener=this::render;
     private int expectedVersion, font, shownChapter=-1, lastSpoken=-1, pages=1, page;
     private String shownId="", nextLocator=null, restoredId="";
     private Uri pendingUri;
@@ -35,7 +37,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     private int libraryGeneration;
     private final ServiceConnection connection=new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name,IBinder binder) {
-            reader=((ReaderService.LocalBinder)binder).get(); reader.listener=MainActivity.this::render;
+            reader=((ReaderService.LocalBinder)binder).get();if(uiVisible)reader.setListener(readerListener);
             refreshLibrary();
             if(pendingUri!=null)consumePending();
             else if(resumeIntent && reader.book!=null)showReader();
@@ -202,7 +204,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         }
     }
     private void render() {
-        if(reader==null || isDestroyed() || navigating)return;
+        if(!uiVisible || reader==null || isDestroyed() || navigating)return;
         if(opening && reader.loadVersion!=expectedVersion && !reader.busy) {opening=false;showReader();return;}
         if(opening && !reader.busy && reader.status.startsWith("Error:")) {opening=false;message("No se pudo importar",reader.status);}
         if(!reader.busy && pendingUri!=null){consumePending();return;}
@@ -224,10 +226,11 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
         }else if(nextLocator!=null){web.locate(nextLocator,0);nextLocator=null;}
         subheading.setText(reader.book.chapters.get(reader.chapter).title+" · "+reader.status);
         if(reader.playing){lastSpoken=reader.chunk;if(!chapterChanged){if(reader.speakingIllustration())web.locate(reader.speechLocator,0);else web.speak(reader.chunk,reader.speechOffset);}}
-        if(!reader.playing){lastSpoken=-1;web.clearSpeech();}
+        if(!reader.playing){lastSpoken=-1;web.clearSpeech();if(syncAfterReturn && !chapterChanged && reader.canResumeSpeech())web.locate(reader.locator,reader.locatorOffset);}
+        syncAfterReturn=false;
     }
     @Override public void position(int chapter,int p,int total,String loc,int offset,int chunk) {
-        if(!reading || reader==null || reader.chapter!=chapter)return;
+        if(!uiVisible || !reading || reader==null || reader.chapter!=chapter)return;
         page=p;pages=total;pageLabel.setText("Página "+(p+1)+" / "+total+" · Sección "+(chapter+1)+" / "+reader.book.chapters.size());
         pageSlider.setMax(Math.max(0,total-1));pageSlider.setProgress(p);reader.visualPosition(loc,offset,chunk,p,total);
     }
@@ -362,5 +365,7 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     @Override public void onBackPressed(){if(sheetOverlay!=null)closeSheet();else if(reading)buildHome();else super.onBackPressed();}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);if(reading && reader!=null)state.putString("readingId",reader.currentId());}
     private void disposeWeb(){if(web!=null){web.removeJavascriptInterface("AndroidReader");web.destroy();web=null;}if(pdf!=null){pdf.close();pdf=null;}}
-    @Override protected void onDestroy(){if(reader!=null)reader.listener=null;if(bound)unbindService(connection);disposeWeb();images.shutdownNow();super.onDestroy();}
+    @Override protected void onStart(){super.onStart();uiVisible=true;syncAfterReturn=true;if(web!=null)web.onResume();if(reader!=null){reader.setListener(readerListener);render();}}
+    @Override protected void onStop(){uiVisible=false;if(reader!=null){reader.removeListener(readerListener);reader.checkpoint();}if(web!=null)web.onPause();super.onStop();}
+    @Override protected void onDestroy(){if(reader!=null)reader.removeListener(readerListener);if(bound)unbindService(connection);disposeWeb();images.shutdownNow();super.onDestroy();}
 }
