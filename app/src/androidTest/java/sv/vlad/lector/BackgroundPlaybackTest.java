@@ -77,6 +77,8 @@ public class BackgroundPlaybackTest {
             try {
                 ui(()->{set(reader[0],"lastCheckpoint",SystemClock.uptimeMillis());for(int n=0;n<=200;n++)reader[0].utteranceRange(voice[0].id,n);assertEquals(200,reader[0].speechOffset);assertFalse((Boolean)get(reader[0],"progressPending"));});
                 SystemClock.sleep(300);assertEquals("No disk writes per word",0,writes.get());assertEquals("No notification updates per word",postTime,notification(context).getPostTime());
+                ui(()->{set(reader[0],"lastCheckpoint",SystemClock.uptimeMillis()-5001);reader[0].utteranceRange(voice[0].id,200);});
+                SystemClock.sleep(100);assertEquals("Periodic recovery checkpoint",1,writes.get());
             }finally{prefs.unregisterOnSharedPreferenceChangeListener(watch);}
             action(context,"Pausar").actionIntent.send();waitFor(()->!reader[0].playing);action(context,"Reanudar");
             ui(()->{assertFalse((Boolean)get(reader[0],"foreground"));assertFalse(((PowerManager.WakeLock)get(reader[0],"wake")).isHeld());assertEquals(PlaybackState.STATE_PAUSED,((MediaSession)get(reader[0],"session")).getController().getPlaybackState().getState());});
@@ -87,6 +89,13 @@ public class BackgroundPlaybackTest {
             ui(()->{reader[0].goChapter(1);});waitFor(()->reader[0].playing);
             scenario.moveToState(Lifecycle.State.RESUMED);
             scenario.onActivity(a->{assertEquals(1,((Integer)get(a,"shownChapter")).intValue());assertNotNull(get(reader[0],"listener"));});
+            scenario.moveToState(Lifecycle.State.CREATED);
+            ui(()->reader[0].utteranceRange(voice[0].id,100));
+            action(context,"Pausar").actionIntent.send();waitFor(()->!reader[0].playing);action(context,"Reanudar");
+            // Exercise the cold resume path: only the saved file/position is available.
+            ui(()->{reader[0].book=null;reader[0].chapter=0;reader[0].chunk=0;reader[0].speechOffset=0;reader[0].locator="";set(reader[0],"narrationIndex",-1);});
+            action(context,"Reanudar").actionIntent.send();waitFor(()->reader[0].playing && reader[0].book!=null);
+            ui(()->{assertEquals(1,reader[0].chapter);assertEquals(reader[0].book.chapters.get(1).chunks.get(0).substring(100),voice[0].spoken);});
             action(context,"Cerrar").actionIntent.send();waitFor(()->!reader[0].playing);waitFor(()->notification(context)==null);
         }finally{if(reader[0]!=null)ui(()->{if(!(Boolean)get(reader[0],"destroyed"))reader[0].stopPlayback();});}
     }
