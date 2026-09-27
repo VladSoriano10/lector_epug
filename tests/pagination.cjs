@@ -58,6 +58,14 @@ const assets = path.join(__dirname, '../app/src/main/assets');
   await page.evaluate(()=>Reader.appearance(true,20));
   await page.evaluate(()=>Reader.speak(6));
   assert.equal(await page.locator('#c6').getAttribute('class'),'speaking');
+  const wordUpdates=await page.evaluate(()=>{
+    const original=AndroidReader.position;let count=0;AndroidReader.position=()=>count++;
+    const currentPage=Reader.snapshot().page;
+    for(let n=0;n<20;n++)Reader.speak(6,n);
+    AndroidReader.position=original;return {count,page:Reader.snapshot().page,currentPage};
+  });
+  assert.equal(wordUpdates.page,wordUpdates.currentPage);
+  assert.equal(wordUpdates.count,0,'word progress on the same page must not scan/report page positions');
   const image = await page.locator('img').boundingBox();
   assert(image.height<=first.height,'tall illustration fits page height');assert(image.width<=first.width,'illustration fits width');
   await page.evaluate(()=>Reader.page(3));
