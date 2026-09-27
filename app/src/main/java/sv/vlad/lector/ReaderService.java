@@ -358,8 +358,11 @@ public class ReaderService extends Service {
         if (session != null) changed();
     }
     public void stopPlayback(){
-        notificationVisible=false;pause();
-        stopForeground(STOP_FOREGROUND_REMOVE);getSystemService(NotificationManager.class).cancel(1);
+        notificationVisible=false;
+        // Remove while Android still associates this notification with the foreground service.
+        // pause() detaches it; detaching first can leave a foreground notification that cancel() cannot remove.
+        if(foreground){foreground=false;stopForeground(STOP_FOREGROUND_REMOVE);}
+        pause();getSystemService(NotificationManager.class).cancel(1);
         session.setActive(false);publishedNotification="";stopSelf();
     }
     public void moveChapter(int delta) {

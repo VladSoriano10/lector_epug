@@ -96,7 +96,12 @@ public class BackgroundPlaybackTest {
             ui(()->{reader[0].book=null;reader[0].chapter=0;reader[0].chunk=0;reader[0].speechOffset=0;reader[0].locator="";set(reader[0],"narrationIndex",-1);});
             action(context,"Reanudar").actionIntent.send();waitFor(()->reader[0].playing && reader[0].book!=null);
             ui(()->{assertEquals(1,reader[0].chapter);assertEquals(reader[0].book.chapters.get(1).chunks.get(0).substring(100),voice[0].spoken);});
-            action(context,"Cerrar").actionIntent.send();waitFor(()->!reader[0].playing);waitFor(()->notification(context)==null);
+            action(context,"Cerrar").actionIntent.send();waitFor(()->!reader[0].playing);
+            waitFor(()->notification(context)==null);
+            // Closing a paused session must also remove the detached notification.
+            ui(()->reader[0].play());waitFor(()->reader[0].playing);
+            action(context,"Pausar").actionIntent.send();waitFor(()->!reader[0].playing);
+            action(context,"Cerrar").actionIntent.send();waitFor(()->notification(context)==null);
         }finally{if(reader[0]!=null)ui(()->{if(!(Boolean)get(reader[0],"destroyed"))reader[0].stopPlayback();});}
     }
 }
