@@ -43,7 +43,7 @@ public class BackgroundPlaybackTest {
         File file=new File(context.getCacheDir(),"background.epub");
         try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(file))){
             entry(zip,"META-INF/container.xml","<container><rootfile full-path='book.opf'/></container>");
-            entry(zip,"book.opf","<package><metadata><dc:title xmlns:dc='http://purl.org/dc/elements/1.1/'>Segundo plano</dc:title></metadata><manifest><item id='a' href='a.xhtml'/><item id='b' href='b.xhtml'/></manifest><spine><itemref idref='a'/><itemref idref='b'/></spine></package>");
+            entry(zip,"book.opf","<package><metadata><dc:title xmlns:dc='http://purl.org/dc/elements/1.1/'>Segundo plano</dc:title></metadata><manifest><item id='a' href='a.xhtml' media-type='application/xhtml+xml'/><item id='b' href='b.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='a'/><itemref idref='b'/></spine></package>");
             StringBuilder text=new StringBuilder("<html><body><p>");for(int n=0;n<30;n++)text.append("Una lectura larga conserva cada palabra mientras usamos otra aplicación. ");text.append("</p></body></html>");
             entry(zip,"a.xhtml",text.toString());entry(zip,"b.xhtml",text.toString());
         }return file;
@@ -67,7 +67,7 @@ public class BackgroundPlaybackTest {
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(intent)){
             scenario.onActivity(a->reader[0]=(ReaderService)get(a,"reader"));
             long deadline=SystemClock.uptimeMillis()+10000;while(reader[0]==null && SystemClock.uptimeMillis()<deadline){scenario.onActivity(a->reader[0]=(ReaderService)get(a,"reader"));SystemClock.sleep(50);}assertNotNull(reader[0]);
-            waitFor(()->reader[0].book!=null && !reader[0].busy);
+            waitFor(()->{assertFalse(reader[0].status,reader[0].status.startsWith("Error:"));return reader[0].book!=null && !reader[0].busy;});
             ui(()->{reader[0].goChapter(0);voice[0]=installVoice(context,reader[0]);reader[0].play();});waitFor(()->reader[0].playing);action(context,"Pausar");
             scenario.moveToState(Lifecycle.State.CREATED);
             ui(()->assertNull("Hidden Activity must detach rendering",get(reader[0],"listener")));
