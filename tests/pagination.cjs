@@ -24,6 +24,11 @@ const assets = path.join(__dirname, '../app/src/main/assets');
   await page.waitForFunction(()=>Reader.snapshot().count>5);
   let first=await page.evaluate(()=>Reader.snapshot());
   assert.equal(first.page,0);assert(first.count>5);
+  // A delayed resize must not restore the position from before a newer page turn.
+  await page.evaluate(()=>{window.dispatchEvent(new Event('resize'));Reader.page(3);});
+  await page.waitForTimeout(200);
+  assert.equal((await page.evaluate(()=>Reader.snapshot())).page,3,'pending resize preserves the latest reading position');
+  await page.evaluate(()=>Reader.page(0));
   const transition=await page.evaluate(()=>{
     Reader.turn(1);
     const sheet=document.querySelector('.turn-sheet');

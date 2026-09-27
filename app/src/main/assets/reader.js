@@ -170,7 +170,7 @@
     clearSpeech() { if(speakingElement)speakingElement.classList.remove('speaking');speakingElement=null; },
     snapshot() {return {ready,epoch,page,count,stride,position:firstVisible(),height:viewport.clientHeight,width:viewport.clientWidth};}
   };
-  window.addEventListener('resize',()=>{clearTimeout(resizeTimer);const saved={...current};resizeTimer=setTimeout(()=>{if(ready)layout(saved.loc,saved.offset);},100);});
+  window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(ready)layout(current.loc,current.offset);},100);});
   document.addEventListener('touchstart',e=>{touch=null;if(!modalOpen && Date.now()>=ignoreInputUntil && e.touches.length===1)touch={x:e.touches[0].clientX,y:e.touches[0].clientY,time:Date.now()};},{passive:true});
   document.addEventListener('touchcancel',()=>{touch=null;},{passive:true});
   document.addEventListener('touchend',e=>{
