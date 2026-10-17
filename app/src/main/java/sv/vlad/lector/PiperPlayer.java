@@ -33,7 +33,7 @@ final class PiperPlayer implements AutoCloseable {
         final Listener listener;
         String id;
         int offset;
-        boolean paused,finished;
+        boolean paused,finished,bufferFinished;
         AudioTrack track;
         Job(String key,String text,int offset,String voice,float rate,String id,Listener listener) {
             this.key=key;this.text=text;this.offset=offset;this.voice=voice;this.rate=rate;this.id=id;this.listener=listener;
@@ -90,7 +90,15 @@ final class PiperPlayer implements AutoCloseable {
                         .setAudioFormat(new AudioFormat.Builder().setSampleRate(generated.getSampleRate()).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
                         .setTransferMode(AudioTrack.MODE_STATIC).setBufferSizeInBytes(pcm.length*2).build();
                     job.track=track;
+                    job.bufferFinished=false;
+                    track.setPlaybackPositionUpdateListener(new AudioTrack.OnPlaybackPositionUpdateListener(){
+                        public void onPeriodicNotification(AudioTrack ignored){}
+                        public void onMarkerReached(AudioTrack completed){synchronized(lock){
+                            if(active==job && job.track==completed){job.bufferFinished=true;lock.notifyAll();}
+                        }}
+                    },main);
                     if(track.write(pcm,0,pcm.length)!=pcm.length)throw new IOException("Incomplete audio buffer");
+                    if(track.setNotificationMarkerPosition(pcm.length)!=AudioTrack.SUCCESS)throw new IOException("Audio marker unavailable");
                     if(!job.paused)track.play();
                 }
                 main.post(()->{synchronized(lock){if(active==job&&!job.paused&&!closed&&job.offset==start)job.listener.range(job.id,start);}});
@@ -98,8 +106,9 @@ final class PiperPlayer implements AutoCloseable {
                     if(!awaitPlaying(job))return;
                     synchronized(lock){
                         if(active!=job||closed)return;
-                        if(job.track.getPlaybackHeadPosition()>=pcm.length){job.track.release();job.track=null;job.offset=end;break;}
-                        lock.wait(40);
+                        if(job.bufferFinished){job.track.release();job.track=null;job.offset=end;break;}
+                        // AudioTrack wakes this worker once at the end of the phrase, not on a timer.
+                        lock.wait();
                     }
                 }
             }
