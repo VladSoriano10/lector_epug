@@ -120,6 +120,7 @@ public class ReaderService extends Service {
         status = "Preparando voces…"; changed();
         tts = new TextToSpeech(this, result -> main.post(() -> {
             if (destroyed || generation != current) return;
+            String previousStatus=status;
             engineInitializing=false;
             ready = result == TextToSpeech.SUCCESS;
             if (ready) {
@@ -146,7 +147,7 @@ public class ReaderService extends Service {
                 if (chosen != null) tts.setVoice(chosen);
                 status = voices.isEmpty() ? "Instala o descarga una voz local en español desde Voces." : "Voz lista";
             } else status = "No se pudo iniciar el motor de voz. Selecciona otro desde Voces.";
-            if(usingPiper())status="Piper listo · "+("claude".equals(piperVoice())?"Claude (México)":"DaveFX (España)");
+            if(usingPiper())status=playing?previousStatus:"Piper listo · "+("claude".equals(piperVoice())?"Claude (México)":"DaveFX (España)");
             changed();tryStartPlayback();
         }), name.isEmpty() ? null : name);
     }

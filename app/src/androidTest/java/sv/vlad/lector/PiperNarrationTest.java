@@ -26,6 +26,9 @@ public class PiperNarrationTest {
         ServiceConnection connection=new ServiceConnection(){public void onServiceConnected(ComponentName n,IBinder b){value[0]=((ReaderService.LocalBinder)b).get();bound.countDown();}public void onServiceDisconnected(ComponentName n){}};
         assertTrue(context.bindService(new Intent(context,ReaderService.class),connection,Context.BIND_AUTO_CREATE));assertTrue(bound.await(10,TimeUnit.SECONDS));
         ReaderService service=value[0];
+        Field fileId=ReaderService.class.getDeclaredField("fileId");fileId.setAccessible(true);
+        String originalId=(String)fileId.get(service);
+        ui(()->{service.manualNavigation();try{fileId.set(service,"piper-narration-test");}catch(Exception e){throw new AssertionError(e);}});
         try {
             for(boolean pdf:new boolean[]{false,true}){
                 ui(()->{
@@ -41,6 +44,6 @@ public class PiperNarrationTest {
                 until(()->service.status.equals("Libro terminado")||service.status.startsWith("No se pudo"));
                 ui(()->{assertEquals("Libro terminado",service.status);assertEquals(1,service.chapter);assertFalse(service.playing);});
             }
-        }finally{ui(()->{service.manualNavigation();service.selectAndroid();service.illustrationSettings(true,3);service.book=null;});context.unbindService(connection);}
+        }finally{ui(()->{service.manualNavigation();service.selectAndroid();service.illustrationSettings(true,3);service.book=null;try{fileId.set(service,originalId);}catch(Exception e){throw new AssertionError(e);}});context.unbindService(connection);}
     }
 }
