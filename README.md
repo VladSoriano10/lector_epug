@@ -51,7 +51,7 @@ Esta app incluye dos voces Piper libres: Claude (es_MX) y DaveFX (es_ES), ejecut
 
 Para Piper no necesitas otra aplicación. Para un motor Android externo, instala sus voces desde su propia aplicación y selecciónalas en **Voces → Motor de voz / Voz sin conexión**.
 
-Los libros y el progreso se guardan localmente. El lector no solicita permiso de Internet, pero el motor TTS es otra aplicación: prueba en modo avión una vez descargada la voz para verificar su funcionamiento local.
+Los libros y el progreso se guardan localmente. El lector no solicita permiso de Internet y Piper funciona con las voces incluidas. Si eliges un motor TTS externo, sus descargas y permisos dependen de esa otra aplicación.
 
 ## Límites
 
@@ -66,10 +66,11 @@ Los libros y el progreso se guardan localmente. El lector no solicita permiso de
 El flujo `.github/workflows/android.yml` instala JDK 17, Android SDK y Gradle 8.11.1 en GitHub Actions. Ejecuta:
 
 ```sh
+python3 scripts/prepare-piper.py
 gradle testDebugUnitTest lintDebug assembleDebug --no-daemon
 ```
 
-También puedes importar el proyecto en Android Studio o ejecutar ese comando con Gradle 8.11.1 y Android SDK 35 instalados. El repositorio todavía no incluye Gradle Wrapper; la versión de Gradle se fija en Actions.
+También puedes importar el proyecto en Android Studio o ejecutar esos comandos con Python 3.11+, Gradle 8.11.1 y Android SDK 35 instalados. Prepara las voces antes de compilar también en Android Studio. El repositorio todavía no incluye Gradle Wrapper; la versión de Gradle se fija en Actions.
 
 Las pruebas JVM comprueban orden de capítulos, entidades/acentos, exclusión de scripts, límites de tamaño, referencias externas, fragmentación sin romper Unicode, imágenes, secciones sin texto e índice con anclas.
 
@@ -79,12 +80,12 @@ Pruebas manuales necesarias en Redmi Note 11:
 
 1. Importar un EPUB, leer varios fragmentos y cambiar de capítulo.
 2. Pausar, cerrar y reabrir: debe conservar el capítulo y fragmento.
-3. Descargar la voz, activar modo avión y escuchar.
+3. Seleccionar Claude y DaveFX en Voces y escuchar ambas en modo avión.
 4. Bloquear pantalla durante 10 minutos y usar los controles de notificación.
 5. Desconectar auriculares o reproducir audio en otra app: debe pausar.
 6. Si MIUI interrumpe la reproducción, revisar la restricción de batería de esta app y del motor de voz.
 7. Abrir y compartir un EPUB desde WhatsApp; comprobar que reaparece al cerrar y abrir la app.
 8. Abrir un libro ilustrado, deslizar a una imagen y comprobar modo oscuro, tamaño de letra, índice y restauración después de cerrar.
 
-Dependencia de extracción HTML: [jsoup](https://jsoup.org/), licencia MIT. No se redistribuyen voces ni libros.
+Dependencia de extracción HTML: [jsoup](https://jsoup.org/), licencia MIT. No se incluyen libros. Las voces incluidas y sus licencias se detallan en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
