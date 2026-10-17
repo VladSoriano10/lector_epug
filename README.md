@@ -1,5 +1,12 @@
 # VladER · Android
 
+Versión **0.5.0**: incorpora **Piper · Claude (México)** y **Piper · DaveFX (España)**,
+incluidas en la APK para narrar sin conexión, cuentas ni pagos. Se eligen en **Voces**;
+las voces Android anteriores siguen disponibles. Piper conserva el audio exacto al
+pausar mientras el proceso sigue abierto y sigue el texto por frases. Usa modelos
+compactos int8 y un hilo de cálculo; consulta [PIPER.md](docs/PIPER.md) para detalles,
+licencias, compilación y límites. Respaldo: `rollback/v0.4.1-antes-piper`.
+
 Versión 0.4.1: lectura en segundo plano con menos trabajo por palabra. Al ocultar la app se desconecta la actualización del visor EPUB/PDF; al volver se sincroniza con la narración. La posición de voz sigue actualizándose en memoria, con guardados periódicos y un guardado al pausar. La notificación deja de reconstruirse por palabra y conserva **Reanudar** al pausar. **Cerrar** retira los controles y detiene la sesión; en pausa no se mantiene el bloqueo de CPU ni el foco de audio. Si Android destruye el servicio y la notificación sigue disponible, Reanudar vuelve a cargar el libro y su posición guardada. Forzar la detención de la app desde Android puede eliminar la notificación.
 
 Versión 0.4.0: biblioteca EPUB y PDF, visor PDF independiente con zoom y voz desde la página actual. La narración anuncia «Ilustración», espera 3 segundos por defecto y continúa; se configura en **Voces → Ilustraciones** o **Aa → Ilustraciones** (0–30 segundos, aviso desactivable). Conserva los identificadores y marcadores EPUB, sus márgenes, paneles y firma permanente. Android 8 o superior.
@@ -40,9 +47,9 @@ El workflow **Compilar APK** también genera un APK debug para pruebas; tiene un
 
 ## Voces y licencias: estado real de esta versión
 
-Esta app **no incluye ninguna voz ni un modelo Piper**. Utiliza la interfaz TTS de Android, por lo que puedes añadir motores compatibles sin modificar el lector. Las voces que ya traiga tu teléfono pueden ser propietarias; aparecer como voz local no significa tener licencia abierta.
+Esta app incluye dos voces Piper libres: Claude (es_MX) y DaveFX (es_ES), ejecutadas localmente mediante sherpa-onnx. También conserva la interfaz TTS de Android para los motores existentes. Las voces de tu teléfono pueden ser propietarias; aparecer como voz local no significa tener licencia abierta. Véanse [los avisos y fuentes](THIRD_PARTY_NOTICES.md).
 
-[RHVoice](https://github.com/RHVoice/RHVoice) es un candidato de motor abierto; su [aplicación para Android](https://play.google.com/store/apps/details?id=com.github.olga_yakovleva.rhvoice.android) anuncia español castellano, latinoamericano y mexicano. Instala y descarga las voces desde la aplicación del motor; después selecciónalo en **Voces → Elegir motor instalado** y elige una voz en **Elegir voz sin conexión**. La ficha de RHVoice indica que algunas voces son de pago. **La selección de una voz latinoamericana con licencia abierta concreta aún está pendiente de verificar**; no se afirma que todas las voces del catálogo sean abiertas o gratuitas.
+Para Piper no necesitas otra aplicación. Para un motor Android externo, instala sus voces desde su propia aplicación y selecciónalas en **Voces → Motor de voz / Voz sin conexión**.
 
 Los libros y el progreso se guardan localmente. El lector no solicita permiso de Internet, pero el motor TTS es otra aplicación: prueba en modo avión una vez descargada la voz para verificar su funcionamiento local.
 
@@ -52,7 +59,7 @@ Los libros y el progreso se guardan localmente. El lector no solicita permiso de
 - Conserva texto, ilustraciones y formato básico. Elimina scripts, formularios, estilos del editor y recursos remotos. Las tablas extensas y SVG vectoriales incrustados complejos pueden requerir ajustes; las ilustraciones superiores a 4 MB no se cargan.
 - Límite de archivo importado: 100 MB; capítulo: 4 MB; contenido HTML acumulado: 16 MB.
 - Lectura según el `spine` del EPUB, no según el orden de los archivos ZIP. Omite contenido marcado como no lineal y recursos que no son HTML.
-- Pendientes: modelos de voz integrados/importables, selección de voz abierta LATAM verificada, eliminación de libros y temporizador.
+- Pendientes: importación de modelos personalizados, eliminación de libros y temporizador.
 
 ## Compilar y verificar
 
@@ -80,3 +87,4 @@ Pruebas manuales necesarias en Redmi Note 11:
 8. Abrir un libro ilustrado, deslizar a una imagen y comprobar modo oscuro, tamaño de letra, índice y restauración después de cerrar.
 
 Dependencia de extracción HTML: [jsoup](https://jsoup.org/), licencia MIT. No se redistribuyen voces ni libros.
+

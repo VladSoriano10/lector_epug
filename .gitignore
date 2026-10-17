@@ -9,3 +9,7 @@ local.properties
 *.pfx
 *.b64
 keystore.properties
+.piper-cache/
+app/libs/
+app/src/main/assets/piper/
+
