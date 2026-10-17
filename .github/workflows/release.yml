@@ -6,7 +6,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -20,6 +20,8 @@ jobs:
         with:
           gradle-version: '8.11.1'
           cache-disabled: true
+      - name: Preparar Piper y voces verificadas
+        run: python3 scripts/prepare-piper.py
       - name: Restaurar clave privada y compilar
         env:
           VLADER_KEYSTORE_BASE64: ${{ secrets.VLADER_KEYSTORE_BASE64 }}
@@ -47,3 +49,4 @@ jobs:
           path: app/build/outputs/apk/release/VladER.apk
           if-no-files-found: error
           retention-days: 30
+

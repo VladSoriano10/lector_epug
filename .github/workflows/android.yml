@@ -24,6 +24,8 @@ jobs:
           gradle-version: '8.11.1'
       - name: Permitir aceleración del emulador de pruebas
         run: sudo chmod 666 /dev/kvm
+      - name: Preparar Piper y voces verificadas
+        run: python3 scripts/prepare-piper.py
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 33
@@ -82,7 +84,9 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: Pruebas, revisión y APK
-        run: gradle testDebugUnitTest lintDebug assembleDebug --no-daemon
+        run: |
+          python3 scripts/prepare-piper.py
+          gradle testDebugUnitTest lintDebug assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: lector-epub-apk
@@ -111,3 +115,4 @@ jobs:
         with:
           name: informes
           path: app/build/reports/
+

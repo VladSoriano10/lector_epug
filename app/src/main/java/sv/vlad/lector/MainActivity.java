@@ -307,12 +307,15 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     private void voiceMenu(){
         if(reader==null)return;
         LinearLayout panel=openSheet("Voces","Tu narración, en español");
+        sheetRow(panel,"Piper · Claude","México · incluida · sin conexión",reader.usingPiper()&&"claude".equals(reader.piperVoice()),()->{reader.selectPiper("claude");closeSheet();});
+        sheetRow(panel,"Piper · DaveFX","España · incluida · sin conexión",reader.usingPiper()&&"davefx".equals(reader.piperVoice()),()->{reader.selectPiper("davefx");closeSheet();});
+        sheetRow(panel,"Voces de Android","Usar las voces que ya tenías",!reader.usingPiper(),()->{reader.selectAndroid();closeSheet();});
         sheetRow(panel,"Ilustraciones","Aviso y espera · "+reader.illustrationSeconds()+" segundos",false,this::illustrations);
         sheetRow(panel,"Motor de voz","Aplicaciones de voz instaladas",false,()->{
             LinearLayout choices=openSheet("Motor de voz","Selecciona la aplicación que narrará tus libros");
             List<TextToSpeech.EngineInfo> engines=reader.engines();
             if(engines.isEmpty())choices.addView(text("No hay motores de voz disponibles.",16,muted()));
-            for(TextToSpeech.EngineInfo engine:engines)sheetRow(choices,engine.label,engine.name,engine.name.equals(prefs.getString("engine","")),()->{reader.initEngine(engine.name);closeSheet();});
+            for(TextToSpeech.EngineInfo engine:engines)sheetRow(choices,engine.label,engine.name,engine.name.equals(prefs.getString("engine","")),()->{reader.selectAndroid();reader.initEngine(engine.name);closeSheet();});
         });
         sheetRow(panel,"Voz sin conexión","Voces locales disponibles en español",false,()->{
             LinearLayout choices=openSheet("Voz sin conexión","Escucha con una voz descargada");
@@ -321,6 +324,16 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
             for(Voice voice:voices)sheetRow(choices,voice.getLocale().getDisplayName(new Locale("es")),voice.getName(),voice.getName().equals(prefs.getString("voice:"+prefs.getString("engine",""),"")),()->{reader.selectVoice(voice);closeSheet();});
         });
         sheetRow(panel,"Velocidad de lectura",String.format(Locale.ROOT,"%.2f× · Ajustar ritmo",reader.rate()),false,this::speed);
+        sheetRow(panel,"Acerca de Piper","Voces y licencias de código abierto",false,()->{
+            LinearLayout info=openSheet("Piper sin conexión","Claude · México / DaveFX · España");
+            info.addView(text("Las dos voces están incluidas. La primera lectura prepara sus archivos y puede tardar unos segundos. Solo se carga una voz a la vez.\n\nPiper sigue el texto por frases. Al pausar conserva el audio exacto mientras la app siga abierta.\n\nVoces Piper ejecutadas mediante sherpa-onnx 1.13.8 (Apache-2.0), ONNX Runtime (MIT), piper-phonemize (MIT) y eSpeak NG (GPL-3.0). Claude: datos Apache-2.0. DaveFX: datos CC0. Versiones compactas int8.\n\nFuentes y textos de licencia: github.com/VladSoriano10/lector_epug, docs/PIPER.md y THIRD_PARTY_NOTICES.md.",15,foreground()));
+            for(String license:new String[]{"GPL-3.0.txt","Apache-2.0.txt","piper-phonemize-MIT.txt","onnxruntime-MIT.txt"})sheetRow(info,license,"Leer licencia incluida",false,()->{
+                try(java.io.InputStream input=getAssets().open("licenses/"+license)){
+                    java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();byte[] buffer=new byte[8192];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);
+                    openSheet(license,"Licencia del componente").addView(text(bytes.toString("UTF-8"),13,foreground()));
+                }catch(java.io.IOException e){message("Licencia","Consulta THIRD_PARTY_NOTICES.md en el repositorio.");}
+            });
+        });
         sheetRow(panel,"Ajustes de Android","Descargar y administrar voces",false,()->{closeSheet();try{startActivity(new Intent("com.android.settings.TTS_SETTINGS"));}catch(ActivityNotFoundException e){startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS));}});
     }
     private GradientDrawable rounded(int color,int radius){GradientDrawable bg=new GradientDrawable();bg.setColor(color);bg.setCornerRadius(dp(radius));return bg;}
@@ -369,3 +382,4 @@ public class MainActivity extends Activity implements PagedReaderView.Listener {
     @Override protected void onStop(){uiVisible=false;if(reader!=null){reader.removeListener(readerListener);reader.checkpoint();}if(web!=null)web.onPause();super.onStop();}
     @Override protected void onDestroy(){if(reader!=null)reader.removeListener(readerListener);if(bound)unbindService(connection);disposeWeb();images.shutdownNow();super.onDestroy();}
 }
+

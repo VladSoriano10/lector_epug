@@ -18,6 +18,12 @@ public class ReaderService extends Service {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final LocalBinder binder = new LocalBinder();
     private TextToSpeech tts;
+    private PiperPlayer piper;
+    private final PiperPlayer.Listener piperListener=new PiperPlayer.Listener(){
+        public void range(String id,int offset){utteranceRange(id,offset);}
+        public void done(String id){utteranceDone(id);}
+        public void error(String id){if(!id.equals(utterance))return;pause();status="No se pudo iniciar Piper. Puedes seleccionar una voz de Android desde Voces.";changed();}
+    };
     private SharedPreferences prefs;
     private AudioManager audio;
     private AudioFocusRequest focus;
@@ -53,6 +59,7 @@ public class ReaderService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         prefs = getSharedPreferences("reader", MODE_PRIVATE);
+        piper = new PiperPlayer(this);
         audio = getSystemService(AudioManager.class);
         AudioAttributes attrs = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();
@@ -106,12 +113,14 @@ public class ReaderService extends Service {
     }
     public void initEngine(String name) {
         pause(); ready = false; engineInitializing=true; generation++;
+        if(piper!=null)piper.unload();
         int current = generation;
         if (tts != null) tts.shutdown();
         prefs.edit().putString("engine", name).apply();
         status = "Preparando voces…"; changed();
         tts = new TextToSpeech(this, result -> main.post(() -> {
             if (destroyed || generation != current) return;
+            String previousStatus=status;
             engineInitializing=false;
             ready = result == TextToSpeech.SUCCESS;
             if (ready) {
@@ -138,6 +147,7 @@ public class ReaderService extends Service {
                 if (chosen != null) tts.setVoice(chosen);
                 status = voices.isEmpty() ? "Instala o descarga una voz local en español desde Voces." : "Voz lista";
             } else status = "No se pudo iniciar el motor de voz. Selecciona otro desde Voces.";
+            if(usingPiper())status=playing?previousStatus:"Piper listo · "+("claude".equals(piperVoice())?"Claude (México)":"DaveFX (España)");
             changed();tryStartPlayback();
         }), name.isEmpty() ? null : name);
     }
@@ -146,7 +156,7 @@ public class ReaderService extends Service {
     }
     public List<Voice> voices() {
         List<Voice> result = new ArrayList<>();
-        if (ready && tts.getVoices() != null) for (Voice v : tts.getVoices())
+        if (ready && tts!=null && tts.getVoices() != null) for (Voice v : tts.getVoices())
             if ("es".equals(v.getLocale().getLanguage()) && !v.isNetworkConnectionRequired()) result.add(v);
         result.sort(Comparator.comparing((Voice v) -> "ES".equals(v.getLocale().getCountry()))
             .thenComparing(v -> v.getLocale().toLanguageTag()).thenComparing(Voice::getName));
@@ -155,11 +165,20 @@ public class ReaderService extends Service {
     public void selectVoice(Voice voice) {
         pause();
         if (tts.setVoice(voice) == TextToSpeech.SUCCESS) {
+            prefs.edit().putString("narrator","android").apply();piper.unload();
             prefs.edit().putString("voice:" + prefs.getString("engine", ""), voice.getName()).apply();
             status = "Voz: " + voice.getLocale().getDisplayName(new Locale("es"));
         } else status = "La voz no está disponible; descárgala en su motor.";
         changed();
     }
+    public boolean usingPiper(){return "piper".equals(prefs.getString("narrator","android"));}
+    public String piperVoice(){String value=prefs.getString("piperVoice","claude");return PiperPlayer.validVoice(value)?value:"claude";}
+    public void selectPiper(String voice){
+        if(!PiperPlayer.validVoice(voice))return;
+        pause();piper.unload();prefs.edit().putString("narrator","piper").putString("piperVoice",voice).apply();
+        status="Piper · "+("claude".equals(voice)?"Claude (México)":"DaveFX (España)")+" · sin conexión";changed();
+    }
+    public void selectAndroid(){pause();piper.unload();prefs.edit().putString("narrator","android").apply();status="Voces de Android seleccionadas";changed();}
     public float rate() { return prefs.getFloat("rate", 1f); }
     public int illustrationSeconds(){return Math.max(0,Math.min(30,prefs.getInt("illustrationSeconds",3)));}
     public boolean announceIllustrations(){return prefs.getBoolean("announceIllustrations",true);}
@@ -267,8 +286,8 @@ public class ReaderService extends Service {
     }
     public void play() {
         if (busy || book == null || playing) return;
-        if (!ready || voices().isEmpty() || tts.getVoice() == null || tts.getVoice().isNetworkConnectionRequired()
-                || !"es".equals(tts.getVoice().getLocale().getLanguage())) {
+        if (!usingPiper() && (!ready || voices().isEmpty() || tts.getVoice() == null || tts.getVoice().isNetworkConnectionRequired()
+                || !"es".equals(tts.getVoice().getLocale().getLanguage()))) {
             status = "Selecciona una voz local en español desde Voces."; changed(); return;
         }
         startForegroundService(new Intent(this, ReaderService.class).setAction("PLAY"));
@@ -297,8 +316,8 @@ public class ReaderService extends Service {
         return START_NOT_STICKY;
     }
     private void tryStartPlayback(){
-        if(!resumeRequested || destroyed || busy || book==null || engineInitializing)return;
-        if(!ready || tts.getVoice()==null || tts.getVoice().isNetworkConnectionRequired() || !"es".equals(tts.getVoice().getLocale().getLanguage())){
+        if(!resumeRequested || destroyed || busy || book==null || (!usingPiper()&&engineInitializing))return;
+        if(!usingPiper() && (!ready || tts==null || tts.getVoice()==null || tts.getVoice().isNetworkConnectionRequired() || !"es".equals(tts.getVoice().getLocale().getLanguage()))){
             pause();status="Selecciona una voz local en español desde Voces.";changed();return;
         }
         if(audio.requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED){pause();status="El audio está ocupado. Intenta de nuevo.";changed();return;}
@@ -323,9 +342,20 @@ public class ReaderService extends Service {
         if (wake.isHeld()) wake.release();
         wake.acquire(10 * 60 * 1000L);
         utterance = UUID.randomUUID().toString();
-        tts.setSpeechRate(rate());
+        if(!usingPiper())tts.setSpeechRate(rate());
         int result;
-        if(item.image()){
+        if(usingPiper()){
+            result=TextToSpeech.SUCCESS;
+            String key=fileId+":"+chapter+":"+narrationIndex;
+            if(item.image()){
+                status=illustrationWait?"Ilustración · pausa antes de continuar":"Ilustración";
+                if(illustrationWait){String id=utterance;main.postDelayed(()->utteranceDone(id),illustrationDelay.start(SystemClock.uptimeMillis()));}
+                else piper.speak(key,"Ilustración",0,piperVoice(),rate(),utterance,piperListener);
+            }else{
+                status="Piper · leyendo fragmento "+(chunk+1);utteranceStart=0;
+                piper.speak(key,book.chapters.get(chapter).chunks.get(chunk),speechOffset,piperVoice(),rate(),utterance,piperListener);
+            }
+        }else if(item.image()){
             status=illustrationWait?"Ilustración · pausa antes de continuar":"Ilustración";
             result=illustrationWait?tts.playSilentUtterance(illustrationDelay.start(SystemClock.uptimeMillis()),TextToSpeech.QUEUE_FLUSH,utterance):tts.speak("Ilustración",TextToSpeech.QUEUE_FLUSH,null,utterance);
         }else{
@@ -350,6 +380,7 @@ public class ReaderService extends Service {
         if(illustrationWait)illustrationDelay.pause(SystemClock.uptimeMillis());
         speechState.paused(playing);
         playing = false; utterance = "";
+        if(piper!=null)piper.pause();
         if (tts != null) tts.stop();
         if (wake != null && wake.isHeld()) wake.release();
         if (audio != null && focus != null) audio.abandonAudioFocusRequest(focus);
@@ -363,6 +394,7 @@ public class ReaderService extends Service {
         // pause() detaches it; detaching first can leave a foreground notification that cancel() cannot remove.
         if(foreground){foreground=false;stopForeground(STOP_FOREGROUND_REMOVE);}
         pause();getSystemService(NotificationManager.class).cancel(1);
+        piper.unload();
         session.setActive(false);publishedNotification="";stopSelf();
     }
     public void moveChapter(int delta) {
@@ -371,7 +403,7 @@ public class ReaderService extends Service {
     public boolean canResumeSpeech() { return speechState.canResume(); }
     private Narration.Item currentItem(){if(book==null)return null;List<Narration.Item> items=book.chapters.get(chapter).narration;return narrationIndex>=0 && narrationIndex<items.size()?items.get(narrationIndex):null;}
     public boolean speakingIllustration(){Narration.Item item=currentItem();return item!=null && item.image();}
-    private void resetNarration(){narrationIndex=-1;illustrationWait=false;speechLocator="";}
+    private void resetNarration(){narrationIndex=-1;illustrationWait=false;speechLocator="";if(piper!=null)piper.cancel();}
     public void manualNavigation() { pause(); speechState.clear();resetNarration(); }
     public void goChapter(int index) {
         if (book == null || busy) return;
@@ -407,6 +439,8 @@ public class ReaderService extends Service {
     @Override public void onDestroy() {
         destroyed = true; setListener(null); publishedNotification="";pause();
         if (tts != null) tts.shutdown();
+        piper.close();
         session.release(); unregisterReceiver(noisy); io.shutdownNow(); super.onDestroy();
     }
 }
+

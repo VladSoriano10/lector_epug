@@ -19,3 +19,12 @@ Conserva también los archivos originales fuera de la aplicación. El respaldo d
 ## Dependencia PDF
 
 La extracción usa [PdfBox-Android 2.0.27.0](https://github.com/TomRoush/PdfBox-Android), port de Apache PDFBox, con licencia Apache-2.0. La visualización usa PdfRenderer de Android. No se envían libros a servidores.
+
+# Punto de retorno antes de Piper (0.4.1)
+
+Rama: `rollback/v0.4.1-antes-piper`.
+Commit: `c8b5a84ce06e3a36297e7713f643ff4f23d4a81a`.
+Conserva EPUB/PDF y notificaciones persistentes con las voces Android anteriores.
+Para revertir por actualización sin borrar datos, restaura ese código en una rama,
+incrementa versionCode por encima del instalado y usa la misma firma permanente.
+
